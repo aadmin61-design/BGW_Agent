@@ -60,6 +60,14 @@ test('hero is a full-screen learning homepage with supplied video and staggered 
   assert.equal(loaded, 1);
 });
 
+test('background lifecycle pauses video decoding and foreground resumes playback', async () => {
+  const pausedBefore = pauses, playedBefore = plays;
+  await act(async () => window.dispatchEvent(new window.CustomEvent('zhixu:visibility', { detail: { active: false } })));
+  assert.equal(pauses, pausedBefore + 1);
+  await act(async () => window.dispatchEvent(new window.CustomEvent('zhixu:visibility', { detail: { active: true } })));
+  assert.equal(plays, playedBefore + 1);
+});
+
 test('mobile menu toggles icons, manages focus and closes with Escape', async () => {
   await click('#mobile-menu-toggle');
   assert.equal(document.querySelector('#mobile-menu-toggle').getAttribute('aria-expanded'), 'true');

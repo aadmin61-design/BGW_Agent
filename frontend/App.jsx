@@ -55,7 +55,7 @@ export function MobileMenu({ open, onClose, onNavigate }) {
   </div>;
 }
 
-export default function App({ loadController = () => import('/assets/app.js?v=20261013-android-client') }) {
+export default function App({ loadController = () => import('/assets/app.js?v=20261013-android-client-2') }) {
   const [page, setPage] = useState(currentPage);
   const [user, setUser] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -100,6 +100,19 @@ export default function App({ loadController = () => import('/assets/app.js?v=20
       if (active && error.name !== 'AbortError') setPaused(true);
     });
     return () => { active = false; };
+  }, [paused, videoFailed]);
+
+  useEffect(() => {
+    const visibility = event => {
+      const active = event.type === 'zhixu:visibility' ? event.detail?.active !== false : !document.hidden;
+      if (!video.current) return;
+      if (!active) video.current.pause();
+      else if (!paused && !videoFailed) video.current.play()?.catch(error => { if (error.name !== 'AbortError') setPaused(true); });
+    };
+    // 动态背景开启时也暂停后台解码，返回后尊重用户手动暂停状态。
+    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('zhixu:visibility', visibility);
+    return () => { document.removeEventListener('visibilitychange', visibility); window.removeEventListener('zhixu:visibility', visibility); };
   }, [paused, videoFailed]);
 
   function togglePlayback() {

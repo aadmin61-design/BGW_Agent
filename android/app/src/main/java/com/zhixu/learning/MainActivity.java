@@ -246,6 +246,7 @@ public final class MainActivity extends Activity {
             catch (ActivityNotFoundException error) { pendingDownload = null; toast("未找到文件保存程序"); }
         });
         content.addView(view, 0, new FrameLayout.LayoutParams(-1, -1));
+        if (resumed) { view.onResume(); view.resumeTimers(); }
         view.loadUrl(lastUrl);
     }
 
@@ -361,7 +362,10 @@ public final class MainActivity extends Activity {
         connectivity = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         networkCallback = new ConnectivityManager.NetworkCallback() {
             @Override public void onAvailable(Network network) { main.post(() -> { if (!isDestroyed()) hostLabel.setText(Uri.parse(baseUrl).getHost()); }); }
-            @Override public void onLost(Network network) { main.post(() -> { if (!isDestroyed()) hostLabel.setText("网络已断开，页面与已提交记录保留"); }); }
+            @Override public void onLost(Network network) { main.post(() -> {
+                if (!isDestroyed()) hostLabel.setText(connectivity.getActiveNetwork() == null
+                    ? "网络已断开，页面与已提交记录保留" : Uri.parse(baseUrl).getHost());
+            }); }
         };
         try { connectivity.registerDefaultNetworkCallback(networkCallback); } catch (RuntimeException ignored) { networkCallback = null; }
     }
@@ -399,6 +403,7 @@ public final class MainActivity extends Activity {
         if (!resumed && level >= TRIM_MEMORY_COMPLETE && webView != null) {
             if (UrlPolicy.sameOrigin(baseUrl, webView.getUrl())) lastUrl = webView.getUrl();
             destroyWebView(); rendererReleased = true;
+            showError("系统已释放后台页面以节省内存。重新连接后，已提交的学习记录仍保留。");
         }
     }
     private void hideCustomView() {

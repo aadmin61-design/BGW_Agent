@@ -116,11 +116,17 @@ html,body { font-family: 'Geist', sans-serif; }
 .zhixu-android .btn,.zhixu-android .option,.zhixu-android .chat-prompts button{min-height:44px}
 @media(max-width:600px){
  .zhixu-android .learning-host .content{padding:20px 14px}
+ .zhixu-android .dashboard-grid,.zhixu-android .main-stack,.zhixu-android .right-stack,.zhixu-android .stat{min-width:0}
+ .zhixu-android .dashboard-grid,.zhixu-android .right-stack{grid-template-columns:minmax(0,1fr)}
+ .zhixu-android .stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+ .zhixu-android .stat{padding:14px 10px}
+ .zhixu-android .stat-footer{flex-wrap:wrap;gap:4px}
  .zhixu-android .question-card{padding:20px 16px}
  .zhixu-android .question-card h2{font-size:clamp(19px,5vw,25px);line-height:1.6}
  .zhixu-android .message,.zhixu-android .option,.zhixu-android .answer-body,.zhixu-android .analysis-body{font-size:14px;line-height:1.8}
  .zhixu-android .chat-panel{height:clamp(360px,75dvh,620px)}
  .zhixu-android .chat-input input,.zhixu-android .field input,.zhixu-android .field textarea{font-size:16px}
+ .zhixu-android #chat-input{font-size:16px;line-height:1.65}
 }
 /* 省资源模式不挂载视频，减少离屏合成；保留半透明色彩和内容层次。 */
 .zhixu-lite .video-controls{display:none!important}
@@ -131,3 +137,4 @@ html,body { font-family: 'Geist', sans-serif; }
 .zhixu-lite .glass-mobile-menu{background:rgba(7,27,34,.98)}
 .zhixu-lite .foldcraft-navbar{background:rgba(9,32,36,.92)}
 .zhixu-lite .foldcraft-frame{font-family:system-ui,sans-serif}
+.zhixu-lite .main-stack>section:not(.panel)>.section-head h2,.zhixu-lite .content>section:not(.panel)>.section-head h2{color:#eff8f0}
