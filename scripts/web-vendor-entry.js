@@ -1,0 +1,20 @@
+// 仅打包实际需要的语言，所有运行时资源由本网站提供，不依赖远程CDN。
+export { Marked } from 'marked';
+export { default as createDOMPurify } from 'dompurify';
+import hljs from 'highlight.js/lib/core';
+import java from 'highlight.js/lib/languages/java';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import python from 'highlight.js/lib/languages/python';
+import sql from 'highlight.js/lib/languages/sql';
+import bash from 'highlight.js/lib/languages/bash';
+import json from 'highlight.js/lib/languages/json';
+import xml from 'highlight.js/lib/languages/xml';
+import css from 'highlight.js/lib/languages/css';
+import yaml from 'highlight.js/lib/languages/yaml';
+import plaintext from 'highlight.js/lib/languages/plaintext';
+import cpp from 'highlight.js/lib/languages/cpp';
+import c from 'highlight.js/lib/languages/c';
+import kotlin from 'highlight.js/lib/languages/kotlin';
+for (const [name, language] of Object.entries({ java, javascript, typescript, python, sql, bash, json, xml, css, yaml, plaintext, cpp, c, kotlin })) hljs.registerLanguage(name, language);
+export { hljs };

@@ -1,0 +1,30 @@
+[Unit]
+Description=Zhixu learning platform
+After=network-online.target mysql.service
+Wants=network-online.target
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=zhixu
+Group=zhixu
+WorkingDirectory=/opt/zhixu
+# 单进程独占Lite文件，保持每天北京时间6点的队列调度。
+ExecStart=/opt/zhixu/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=MALLOC_ARENA_MAX=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# Lite初始化会删除并重建milvus缓存子目录，因此仅开放专用缓存父目录。
+ReadWritePaths=/opt/zhixu/data /opt/zhixu/uploads /opt/zhixu/imports /opt/zhixu/.cache
+UMask=0077
+TimeoutStopSec=240
+
+[Install]
+WantedBy=multi-user.target

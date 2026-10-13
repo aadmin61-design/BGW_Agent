@@ -1,0 +1,15 @@
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ram:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "ram:ServiceName": "workbench.ecs.aliyuncs.com"
+        }
+      }
+    }
+  ]
+}

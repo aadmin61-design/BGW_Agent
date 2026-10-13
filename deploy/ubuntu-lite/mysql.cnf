@@ -1,0 +1,10 @@
+[mysqld]
+# MySQL只供本机应用访问，小实例不加载大型性能统计缓存。
+bind-address=127.0.0.1
+mysqlx-bind-address=127.0.0.1
+innodb_buffer_pool_size=128M
+max_connections=40
+performance_schema=OFF
+table_open_cache=256
+tmp_table_size=16M
+max_heap_table_size=16M

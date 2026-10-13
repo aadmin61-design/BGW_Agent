@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+.conda/
+.conda-pkgs/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+uploads/
+preview-artifacts/
+node_modules/
+.tools/
+
+# 仅发布源码，保留运行数据和私有配置在服务器。
+.cache/
+imports/
+migration/
+*.db
+*.db-*
+*.sqlite*
+*.log
+*.pem
+*.key
+*credentials*.txt

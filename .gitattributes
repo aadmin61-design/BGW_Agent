@@ -1,0 +1,5 @@
+# 文本统一LF，确保Linux脚本可直接执行。
+* text=auto eol=lf
+*.mp4 -text
+*.png -text
+*.jpg -text

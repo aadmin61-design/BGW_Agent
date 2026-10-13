@@ -1,0 +1,33 @@
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ecs-workbench:LoginECSInstance",
+      "Resource": "acs:ecs:cn-shanghai:<ACCOUNT_ID>:instance/<INSTANCE_ID>"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ecs-workbench:EndSessions",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["ecs:DescribeInstances", "ecs:DescribeCloudAssistantStatus"],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ecs:StartTerminalSession",
+      "Resource": "acs:ecs:cn-shanghai:<ACCOUNT_ID>:instance/<INSTANCE_ID>"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ram:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {"ram:ServiceName": "workbench.ecs.aliyuncs.com"}
+      }
+    }
+  ]
+}

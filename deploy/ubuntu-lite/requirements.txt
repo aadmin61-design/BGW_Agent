@@ -1,0 +1,2 @@
+# Linux锁文件沿用项目依赖，单独兼容Lite 2.5需要的pkg_resources。
+-r requirements-linux.lock.txt
