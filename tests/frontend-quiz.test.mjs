@@ -54,6 +54,15 @@ globalThis.fetch = async (url, options={}) => {
 };
 await import('../web/app.js?quiz-regression');
 const click = async selector => events.click({ target: document.querySelector(selector) });
+
+test('Android background stops quiz polling and foreground resumes without a POST', () => {
+  const before = posts;
+  window.dispatchEvent(new window.CustomEvent('zhixu:visibility', { detail: { active: false } }));
+  assert.equal([...timers.values()].some(value => value.delay === 15000 || value.delay === 3000), false);
+  window.dispatchEvent(new window.CustomEvent('zhixu:visibility', { detail: { active: true } }));
+  assert.ok([...timers.values()].some(value => value.delay === 15000));
+  assert.equal(posts, before);
+});
 async function poll(delay = 3000) {
   const entry = [...timers.entries()].find(([, value]) => value.delay === delay);
   assert.ok(entry, 'poll was scheduled'); timers.delete(entry[0]); await entry[1].callback();

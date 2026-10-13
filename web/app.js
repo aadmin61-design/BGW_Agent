@@ -6,6 +6,7 @@ import { nextPendingLesson } from './learning.js';
 const demo = new URLSearchParams(location.search).get('demo') === '1';
 const root = document.getElementById?.('learning-app') || document.querySelector('#app');
 const state = { user: null, page: 'dashboard', lessons: [], quiz: [], quizJob: null, quizTimer: null, quizPollError: '', quizDrafts: {}, importJobs: [], retryJob: null, bookmarks: [], kbs: [], dashboard: {}, selected: null, conversation: null, chatPending: null, filter: 'all', search: '', answer: '', authMode: 'login', authError: '', busy: false, epoch: 0, jobsTimer: null };
+let pageVisible = true;
 // 所有用户/模型/文档文本必须转义后再插入模板，防止持久化脚本注入。
 const e = text => String(text ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const paths = {
@@ -230,7 +231,7 @@ async function navigate(page, updateHash = true) {
       state.importJobs = jobs;
       shell(adminView(jobs));
       // 编辑重试文件或提交操作时保留表单，轮询不能覆盖已选文件与输入。
-      state.jobsTimer = setInterval(async () => { try { const current = await api('/admin/jobs'); if (state.epoch === epoch && state.page === 'admin') { state.importJobs = current; if (!state.retryJob && !state.busy && document.querySelector('#jobs-list')) document.querySelector('#jobs-list').innerHTML = jobsHTML(current); } } catch { clearInterval(state.jobsTimer); } }, 4000);
+      pollImportJobs();
     } else { renderPage(); if (page === 'quiz') pollQuizGeneration(); }
   } catch (err) { if (state.user && epoch === state.epoch) shell(empty('学习空间暂时未能打开', err.message)); toast(err.message); }
 }
@@ -257,9 +258,10 @@ async function openItem(id, bookmark = false) {
 
 function pollQuizGeneration() {
   clearTimeout(state.quizTimer);
-  if (state.page !== 'quiz' || !shouldPollQuiz() || !state.user) return;
+  if (!pageVisible || state.page !== 'quiz' || !shouldPollQuiz() || !state.user) return;
   const epoch = state.epoch;
   state.quizTimer = setTimeout(async () => {
+    if (!pageVisible) return;
     try {
       const status = await api('/plans/quiz/generation');
       if (state.epoch !== epoch || state.page !== 'quiz') return;
@@ -286,6 +288,25 @@ function pollQuizGeneration() {
       state.quizPollError = '暂时无法读取测验状态，请重新查看。'; renderPage();
     }
   }, quizGenerating() ? 3000 : 15000);
+}
+
+function pollImportJobs() {
+  clearInterval(state.jobsTimer);
+  if (!pageVisible || state.page !== 'admin' || !state.user?.is_admin) return;
+  const epoch = state.epoch;
+  let inFlight = false;
+  state.jobsTimer = setInterval(async () => {
+    if (!pageVisible || inFlight || state.epoch !== epoch || state.page !== 'admin') return;
+    inFlight = true;
+    try {
+      const current = await api('/admin/jobs');
+      if (pageVisible && state.epoch === epoch && state.page === 'admin') {
+        state.importJobs = current;
+        if (!state.retryJob && !state.busy && document.querySelector('#jobs-list')) document.querySelector('#jobs-list').innerHTML = jobsHTML(current);
+      }
+    } catch { clearInterval(state.jobsTimer); }
+    finally { inFlight = false; }
+  }, 4000);
 }
 
 async function generatePlan(kind, more = false) {
@@ -452,7 +473,28 @@ root.addEventListener('submit', async event => {
 
 // 跨日主动刷新今日计划；收藏中的旧题保持可访问。
 let activeDay = dayString();
-setInterval(() => { const day = dayString(); if (day !== activeDay && state.user) { activeDay = day; if (state.page !== 'detail' || !state.conversation?.saved) { toast('新的一天开始了，学习空间已刷新。'); navigate('dashboard'); } } }, 30000);
+function refreshDay() {
+  if (!pageVisible) return;
+  const day = dayString();
+  if (day !== activeDay && state.user) { activeDay = day; if (state.page !== 'detail' || !state.conversation?.saved) { toast('新的一天开始了，学习空间已刷新。'); navigate('dashboard'); } }
+}
+setInterval(refreshDay, 30000);
+function visibility(active) {
+  pageVisible = active;
+  clearTimeout(state.quizTimer); clearInterval(state.jobsTimer);
+  // 后台停止轮询，返回时只恢复当前视图，保留未提交输入和独立对话。
+  if (active) { refreshDay(); pollQuizGeneration(); pollImportJobs(); }
+}
+document.addEventListener('visibilitychange', () => visibility(!document.hidden));
+window.addEventListener('zhixu:visibility', event => visibility(event.detail?.active !== false));
+window.zhixuAndroidBack = () => {
+  if (state.page !== 'detail') return false;
+  navigate(state.selected?.kind === 'lesson' ? 'lesson' : 'quiz'); return true;
+};
+window.visualViewport?.addEventListener('resize', () => {
+  const input = document.activeElement;
+  if (input?.matches('input,textarea')) requestAnimationFrame(() => { if (input.isConnected) input.scrollIntoView({ block: 'nearest' }); });
+});
 window.addEventListener('popstate', () => { if (document.getElementById?.('learning-app')) return; const page = location.hash.slice(1); if (state.user && titles[page] && page !== 'detail') navigate(page, false); });
 
 // 首页保持单屏展示；业务模块可预加载，但不将首页地址改成学习概览。

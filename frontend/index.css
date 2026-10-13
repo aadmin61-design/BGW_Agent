@@ -105,3 +105,29 @@ html,body { font-family: 'Geist', sans-serif; }
 @media(min-width:1024px){.video-controls.is-home{right:64px}}
 @media(max-height:600px) and (max-width:767px){.foldcraft-hero-content{padding-top:16px;padding-bottom:20px}.hero-heading{font-size:clamp(22px,5.5vh,30px)}.hero-badge{margin-bottom:12px;font-size:11px}.hero-description{font-size:12px;margin-bottom:12px}.video-controls.is-home{bottom:20px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* 安卓屏幕以WebView实际可用空间计算；键盘展开、横屏和分屏时允许滚动。 */
+.zhixu-android .foldcraft-root{height:auto;min-height:100dvh;overflow:visible}
+.zhixu-android .foldcraft-hero-content{height:auto;min-height:calc(100dvh - 80px);gap:24px}
+.zhixu-android .learning-host .content{overflow-wrap:anywhere}
+.zhixu-android .question-card,.zhixu-android .chat-panel{min-width:0}
+.zhixu-android .markdown-body pre{max-width:100%;overflow:auto}
+.zhixu-android input,.zhixu-android textarea{scroll-margin-bottom:24px}
+.zhixu-android .btn,.zhixu-android .option,.zhixu-android .chat-prompts button{min-height:44px}
+@media(max-width:600px){
+ .zhixu-android .learning-host .content{padding:20px 14px}
+ .zhixu-android .question-card{padding:20px 16px}
+ .zhixu-android .question-card h2{font-size:clamp(19px,5vw,25px);line-height:1.6}
+ .zhixu-android .message,.zhixu-android .option,.zhixu-android .answer-body,.zhixu-android .analysis-body{font-size:14px;line-height:1.8}
+ .zhixu-android .chat-panel{height:clamp(360px,75dvh,620px)}
+ .zhixu-android .chat-input input,.zhixu-android .field input,.zhixu-android .field textarea{font-size:16px}
+}
+/* 省资源模式不挂载视频，减少离屏合成；保留半透明色彩和内容层次。 */
+.zhixu-lite .video-controls{display:none!important}
+.zhixu-lite .video-fallback{background:radial-gradient(ellipse at 85% 15%,#39605b 0,transparent 60%),linear-gradient(145deg,#071b2c,#103b40 55%,#23473b)}
+.zhixu-lite *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.zhixu-lite .learning-host{--panel:rgba(248,253,251,.93)}
+.zhixu-lite .learning-host .workspace-tools{background:rgba(244,251,249,.93)}
+.zhixu-lite .glass-mobile-menu{background:rgba(7,27,34,.98)}
+.zhixu-lite .foldcraft-navbar{background:rgba(9,32,36,.92)}
+.zhixu-lite .foldcraft-frame{font-family:system-ui,sans-serif}

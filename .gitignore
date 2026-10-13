@@ -12,6 +12,12 @@ uploads/
 preview-artifacts/
 node_modules/
 .tools/
+android/.gradle/
+android/local.properties
+android/**/build/
+*.jks
+*.keystore
+*.p12
 
 # 仅发布源码，保留运行数据和私有配置在服务器。
 .cache/

@@ -55,7 +55,7 @@ export function MobileMenu({ open, onClose, onNavigate }) {
   </div>;
 }
 
-export default function App({ loadController = () => import('/assets/app.js?v=20261013-import-resume') }) {
+export default function App({ loadController = () => import('/assets/app.js?v=20261013-android-client') }) {
   const [page, setPage] = useState(currentPage);
   const [user, setUser] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -63,10 +63,14 @@ export default function App({ loadController = () => import('/assets/app.js?v=20
   const [videoFailed, setVideoFailed] = useState(false);
   const [bridgeFailed, setBridgeFailed] = useState(false);
   const bridge = useRef(null), video = useRef(null), toggle = useRef(null);
+  const android = /ZhixuAndroid\//.test(window.navigator.userAgent);
+  const lite = android && /ZhixuLite\/1/.test(window.navigator.userAgent);
   const home = page === 'home';
   const closeMenu = React.useCallback(() => { setMobileMenuOpen(false); toggle.current?.focus(); }, []);
 
   useEffect(() => {
+    document.documentElement.classList.toggle('zhixu-android', android);
+    document.documentElement.classList.toggle('zhixu-lite', lite);
     const update = event => { setUser(event.detail.user); };
     const route = () => {
       const next = currentPage();
@@ -126,7 +130,7 @@ export default function App({ loadController = () => import('/assets/app.js?v=20
 
   return <div className={home ? 'foldcraft-frame foldcraft-root relative h-screen w-full overflow-hidden bg-black font-geist' : 'foldcraft-frame relative min-h-screen w-full bg-black font-geist'}>
     <div className="video-fallback pointer-events-none fixed inset-0" />
-    <video ref={video} hidden={videoFailed} src={VIDEO_URL} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onError={() => setVideoFailed(true)} className="pointer-events-none fixed inset-0 h-full w-full object-cover" style={{ objectPosition: '70% center' }} />
+    {!lite && <video ref={video} hidden={videoFailed} src={VIDEO_URL} autoPlay muted loop playsInline preload="auto" aria-hidden="true" onError={() => setVideoFailed(true)} className="pointer-events-none fixed inset-0 h-full w-full object-cover" style={{ objectPosition: '70% center' }} />}
     <div className={`video-scrim pointer-events-none fixed inset-0 ${home ? 'is-home' : 'is-workspace'}`} />
     <header className="foldcraft-navbar relative z-30 flex min-h-[80px] items-center justify-between px-6 py-5 md:px-12 lg:px-16">
       <div className="flex items-center">
@@ -147,7 +151,7 @@ export default function App({ loadController = () => import('/assets/app.js?v=20
     </header>
     <MobileMenu open={mobileMenuOpen} onClose={closeMenu} onNavigate={navigate} />
     <HeroContent onNavigate={navigate} visible={home} />
-    <div className={`video-controls flex items-center gap-3 ${home ? 'is-home' : 'is-workspace'}`}>
+    <div hidden={lite} className={`video-controls flex items-center gap-3 ${home ? 'is-home' : 'is-workspace'}`}>
       <span hidden={!home} className="hidden text-[10px] tracking-[.18em] text-white/60 sm:block">LEARN. CONNECT. GROW.</span>
       <button type="button" onClick={togglePlayback} aria-label={videoFailed ? '重新加载背景视频' : paused ? '播放背景视频' : '暂停背景视频'} aria-pressed={paused} title={videoFailed ? '重新加载背景视频' : paused ? '播放背景视频' : '暂停背景视频'} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-black/15 text-white/90 transition-colors hover:bg-white/15">
         {videoFailed ? <RotateCw size={12} aria-hidden="true" /> : paused ? <Play size={12} aria-hidden="true" /> : <Pause size={12} aria-hidden="true" />}

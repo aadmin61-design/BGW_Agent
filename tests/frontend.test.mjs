@@ -8,7 +8,7 @@ const toast = { textContent: '', classList: { add() {}, remove() {} } };
 const fakeInput = { value: '', focus() {}, setSelectionRange() {} };
 globalThis.location = { search: '?demo=1', hash: 'dashboard', href: '' };
 globalThis.localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v) };
-globalThis.document = { querySelector(selector) {
+globalThis.document = { addEventListener() {}, querySelector(selector) {
   if (selector === '#app') return root;
   if (selector === '#toast') return toast;
   if (selector === '#chat-messages') return { scrollTop: 0, scrollHeight: 100 };
@@ -21,6 +21,17 @@ globalThis.clearInterval = () => {};
 globalThis.clearTimeout = () => {};
 await import('../web/app.js');
 const click = async dataset => events.click({ target: { closest: () => ({ dataset, disabled: false }) } });
+
+test('Android system back returns from a question to its list', async () => {
+  await click({ nav: 'lesson' });
+  const first = JSON.parse(storage.get('bgw-demo')).lessons[0];
+  await click({ item: first.id });
+  assert.equal(window.zhixuAndroidBack(), true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(window.zhixuAndroidBack(), false);
+  assert.match(root.innerHTML, /顺着脉络/);
+  await click({ nav: 'dashboard' });
+});
 
 test('dashboard makes demo status explicit and includes learning and review', () => {
   assert.match(root.innerHTML, /当前使用示例数据/);

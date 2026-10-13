@@ -428,6 +428,8 @@ public final class MainActivity extends Activity {
         if (now - backPressedAt < 2000) finish();
         else { backPressedAt = now; toast("再按一次返回退出知序"); }
     }
+    // Android33及以上已注册平台预测返回回调；此重写仅兼容旧系统。
+    @android.annotation.SuppressLint("GestureBackNavigation")
     @Override public void onBackPressed() { back(); }
     @Override protected void onDestroy() {
         if (networkCallback != null) try { connectivity.unregisterNetworkCallback(networkCallback); } catch (RuntimeException ignored) {}

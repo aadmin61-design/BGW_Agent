@@ -13,7 +13,7 @@ const root = {
 const toast = { textContent: '', classList: { add() {}, remove() {} } };
 globalThis.location = { search: '', hash: 'dashboard', href: '' };
 globalThis.localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v) };
-globalThis.document = { querySelector(selector) {
+globalThis.document = { addEventListener() {}, querySelector(selector) {
   if (selector === '#app') return root;
   if (selector === '#toast') return toast;
   if (selector === '#chat-messages') return { scrollTop: 0, scrollHeight: 100 };
