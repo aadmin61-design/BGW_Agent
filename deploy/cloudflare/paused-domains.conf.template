@@ -1,0 +1,9 @@
+# 先替换为备案办理中的域名，再安装并启用，覆盖原网站域名路由。
+server {
+    listen 80;
+    server_name example.com www.example.com;
+    default_type text/plain;
+    charset utf-8;
+    add_header Retry-After 86400 always;
+    return 503 "网站ICP备案办理中，当前域名暂未开放服务。\n";
+}

@@ -1,0 +1,26 @@
+[Unit]
+Description=Zhixu temporary Cloudflare HTTPS tunnel
+After=network-online.target nginx.service zhixu.service
+Wants=network-online.target
+Requires=nginx.service
+
+[Service]
+Type=simple
+User=zhixu
+Group=zhixu
+# 临时隧道不需要账号密钥，独立HOME避免读取其他隧道配置。
+StateDirectory=zhixu-tunnel
+Environment=HOME=/var/lib/zhixu-tunnel
+WorkingDirectory=/var/lib/zhixu-tunnel
+ExecStart=/opt/zhixu/.tools/cloudflared/cloudflared tunnel --no-autoupdate --protocol http2 --edge-ip-version 4 --metrics 127.0.0.1:20241 --url http://127.0.0.1:8080
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

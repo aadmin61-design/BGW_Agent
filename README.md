@@ -48,6 +48,8 @@ Linux 使用 Lite 时安装 `deploy/ubuntu-lite/requirements.txt`，通过 `VECT
 
 Ubuntu 生产环境部署见 [部署说明](deploy/ubuntu-lite/README.md)。Lite 初始化会删除并重建工作目录下的 `.cache/milvus`，因此 systemd 必须允许专用 `.cache` 父目录写入；应用源代码保持只读。运行数据库和向量文件需要长期保存，不能只部署前端页面。
 
+备案期间可使用[Cloudflare临时HTTPS隧道部署](deploy/cloudflare/README.md)：网站只监听服务器本机，停用公网Nginx网站入口，隧道由systemd自启运行。Quick Tunnel使用随机地址，重建时变化；固定生产地址应另行配置账号管理的命名隧道。`scripts/verify_tunnel.py`显式验证注册、登录、学习及实际问答，并精确清理测试账号。
+
 ## 前端开发
 
 ```bash
