@@ -22,7 +22,7 @@ from .ingestion import local_files, run_import, SUPPORTED, retry_files, cleanup_
 from .ai import generate_quiz, tutor_graph, TutorUnavailable
 from .migrations import migrate_message_order, migrate_import_sources
 from .quiz_jobs import QuizService, job_view, next_generation
-from .models import QuizGeneration
+from .models import QuizGeneration, ImportCheckpoint
 
 
 def today():
@@ -237,6 +237,21 @@ def create_kb(body: KBInput, user: User = Depends(admin_user), db: Session = Dep
     return {"id": kb.id, "name": kb.name}
 
 
+@app.get("/api/admin/knowledge-bases/{kb_id}/integrity")
+def knowledge_integrity(kb_id: str, user: User = Depends(admin_user), db: Session = Depends(get_db)):
+    kb = db.get(KnowledgeBase, kb_id)
+    if kb is None:
+        raise HTTPException(404, "知识库不存在")
+    if kb.status != "ready":
+        raise HTTPException(409, "知识库尚未处理完成")
+    from .vectors import vector_store
+    chunks = list(db.scalars(select(Chunk).where(Chunk.kb_id == kb_id)))
+    result = vector_store().verify_chunks(chunks)
+    # 仅返回统计，不通过诊断接口下发原文、向量或凭据。
+    return {"kb_id": kb.id, "documents": db.scalar(select(func.count()).select_from(Document).where(Document.kb_id == kb.id)),
+            "concepts": db.scalar(select(func.count()).select_from(Concept).where(Concept.kb_id == kb.id)), "vectors": result}
+
+
 def lock_kb(db, kb_id):
     kb = db.scalar(select(KnowledgeBase).where(KnowledgeBase.id == kb_id).with_for_update())
     if not kb:
@@ -314,10 +329,18 @@ def save_uploads(files):
 
 @app.get("/api/admin/jobs")
 def jobs(user: User = Depends(admin_user), db: Session = Depends(get_db)):
-    return [{"id": j.id, "kb_id": j.kb_id, "status": j.status, "total": j.total,
-             "completed": j.completed, "chunks": j.chunks, "message": j.message,
-             "has_sources": bool(j.source_paths) and j.source_kind in {"local", "upload"}}
-            for j in db.scalars(select(ImportJob).order_by(ImportJob.created_at.desc()).limit(30))]
+    rows = list(db.scalars(select(ImportJob).order_by(ImportJob.created_at.desc()).limit(30)))
+    checkpoints = list(db.scalars(select(ImportCheckpoint).where(ImportCheckpoint.job_id.in_([j.id for j in rows]))))
+    result = []
+    for job in rows:
+        saved = [c for c in checkpoints if c.job_id == job.id]
+        result.append({"id": job.id, "kb_id": job.kb_id, "status": job.status, "total": job.total,
+            "completed": job.completed, "chunks": job.chunks, "message": job.message,
+            "total_chunks": sum(c.total_chunks for c in saved),
+            "processed_chunks": sum(c.processed_chunks for c in saved),
+            "vectorized_chunks": sum(c.vectorized_chunks for c in saved),
+            "has_sources": bool(job.source_paths) and job.source_kind in {"local", "upload"}})
+    return result
 
 
 def inactive_job(db, job_id):
@@ -343,7 +366,7 @@ def restart_import(db, job, kb, paths, background, source_kind):
     job.source_paths = [str(Path(p).resolve()) for p in paths]
     job.source_kind = source_kind
     job.status, job.total, job.completed, job.chunks = "queued", len(paths), 0, 0
-    job.message = "任务已重新排队，已成功入库的文档会自动跳过。"
+    job.message = "任务已重新排队，已完成文档自动跳过，已保存片段继续处理。"
     kb.status = "indexing"
     db.commit()
     if old_sources.source_kind == "upload" and old_sources.source_paths != job.source_paths:

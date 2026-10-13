@@ -22,7 +22,7 @@ def package(snapshot):
         shutil.copytree(ROOT / name, target / name,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "reference-frames"))
     (target / "scripts").mkdir()
-    for name in ("cloud_migrate.py", "manage.py", "verify_server.py", "probe_lite.py", "repair_quiz_options.py", "build-web.mjs", "build-web-vendor.mjs"):
+    for name in ("cloud_migrate.py", "manage.py", "verify_server.py", "verify_full_import.py", "probe_lite.py", "repair_quiz_options.py", "submit_full_import.py", "build-web.mjs", "build-web-vendor.mjs"):
         shutil.copy2(ROOT / "scripts" / name, target / "scripts" / name)
     shutil.copy2(ROOT / "requirements.lock.txt", target / "requirements.lock.txt")
     for name in ("package.json", "package-lock.json", "tailwind.config.js"):

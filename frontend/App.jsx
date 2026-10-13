@@ -55,7 +55,7 @@ export function MobileMenu({ open, onClose, onNavigate }) {
   </div>;
 }
 
-export default function App({ loadController = () => import('/assets/app.js?v=20261013-quiz-options') }) {
+export default function App({ loadController = () => import('/assets/app.js?v=20261013-import-resume') }) {
   const [page, setPage] = useState(currentPage);
   const [user, setUser] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

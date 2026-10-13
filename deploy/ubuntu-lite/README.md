@@ -37,6 +37,10 @@ curl http://127.0.0.1:8001/api/health
 
 代码更新时先备份，再替换源码和前端产物，重启 `zhixu`；不重复执行数据库初始化。每日测验使用 `Asia/Shanghai`，06:00 自动调度。
 
+长文导入新增`import_checkpoints`和`import_pieces`临时缓存表，启动时只创建缺失表，不覆盖原有用户或知识。失败后使用管理员“重启任务”继续未完成片段；更新服务前应等待正在运行的导入结束。原文整体抽取、向量写入和正式发布成功后清理临时片段，保留摘要及完成状态。DOCX纯位图不自动OCR。
+
+管理员接口`GET /api/admin/knowledge-bases/{id}/integrity`在在线进程内逐条核对SQL片段和向量的ID、知识库、来源及正文，返回计数；未就绪知识库返回409。完整原文核验见`scripts/verify_full_import.py`，显式追加`--model`才执行真实助教测试。
+
 `scripts/repair_quiz_options.py` 默认预览旧选择题调整数量，`--apply` 先备份再修改今日未作答、未收藏且没有聊天内容的题目；已完成及已有对话题目保持原样，重复执行不会重新打乱已更新题目。
 
 Workbench 策略 JSON 是权限模板，使用前替换 `<ACCOUNT_ID>`、`<INSTANCE_ID>` 和地域，并在自己的阿里云账号中审查后授权。

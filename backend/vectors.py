@@ -54,6 +54,23 @@ class VectorStore:
         if ids:
             self.client.delete(self.name, ids=ids)
 
+    def verify_chunks(self, chunks):
+        # 在服务进程中核对SQL与向量内容，维护脚本不另开Lite进程。
+        missing, mismatched = [], []
+        for offset in range(0, len(chunks), 100):
+            batch = chunks[offset:offset + 100]
+            rows = self.client.get(self.name, ids=[chunk.id for chunk in batch],
+                output_fields=["id", "kb_id", "text", "source"])
+            by_id = {row["id"]: row for row in rows}
+            for chunk in batch:
+                row = by_id.get(chunk.id)
+                if row is None:
+                    missing.append(chunk.id)
+                elif (row["kb_id"], row["text"], row["source"]) != (chunk.kb_id, chunk.text, chunk.source):
+                    mismatched.append(chunk.id)
+        return {"expected": len(chunks), "missing": len(missing), "mismatched": len(mismatched),
+                "ok": not missing and not mismatched}
+
     @staticmethod
     def _validate_id(value):
         import re

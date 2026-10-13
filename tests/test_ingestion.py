@@ -21,6 +21,22 @@ def test_docx_tables_are_preserved(tmp_path):
     assert "volatile" in content and "可见性" in content
 
 
+def test_docx_textboxes_nested_tables_and_alternate_content(tmp_path):
+    from docx import Document
+    from docx.oxml import parse_xml
+    doc = Document()
+    paragraph = doc.add_paragraph("Java图示")
+    paragraph._p.append(parse_xml('''<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><mc:Choice Requires="w"><w:txbxContent><w:p><w:r><w:t>图中Eden区域</w:t></w:r></w:p></w:txbxContent></mc:Choice><mc:Fallback><w:txbxContent><w:p><w:r><w:t>图中Eden区域</w:t></w:r></w:p></w:txbxContent></mc:Fallback></mc:AlternateContent>'''))
+    table = doc.add_table(rows=1, cols=1)
+    table.cell(0, 0).text = "外层表格"
+    nested = table.cell(0, 0).add_table(rows=1, cols=1)
+    nested.cell(0, 0).text = "内层CAS知识"
+    path = tmp_path / "drawing.docx"; doc.save(path)
+    content = "".join(text for text, _ in parse_document(path))
+    assert content.count("图中Eden区域") == 1
+    assert "外层表格" in content and "内层CAS知识" in content
+
+
 def test_empty_pdf_requires_ocr(tmp_path):
     from pypdf import PdfWriter
     writer = PdfWriter(); writer.add_blank_page(width=100, height=100)

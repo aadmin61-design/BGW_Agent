@@ -57,3 +57,13 @@ def test_existing_lite_collection_is_explicitly_loaded(tmp_path, monkeypatch):
     monkeypatch.setattr(FakeClient, "has_collection", lambda self, name: True)
     monkeypatch.setattr(vectors, "MilvusClient", FakeClient)
     assert vectors.VectorStore().client.loaded == "bgw_knowledge_v1"
+
+
+def test_integrity_detects_missing_and_wrong_vector_source():
+    store = object.__new__(vectors.VectorStore)
+    store.name = "bgw_knowledge_v1"
+    chunks = [SimpleNamespace(id=str(i), kb_id="kb", text="正文", source="来源") for i in range(3)]
+    store.client = SimpleNamespace(get=lambda *args, **kwargs: [
+        {"id": "0", "kb_id": "kb", "text": "正文", "source": "来源"},
+        {"id": "1", "kb_id": "kb", "text": "另一篇正文", "source": "来源"}])
+    assert store.verify_chunks(chunks) == {"expected": 3, "missing": 1, "mismatched": 1, "ok": False}

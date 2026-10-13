@@ -17,6 +17,7 @@ let jobs = ['source', 'legacy', 'delete', 'cancel', 'upload', 'running', 'comple
   status: id === 'running' ? 'running' : id === 'complete' ? 'completed' : id === 'upload' ? 'partial' : 'failed',
   has_sources: id === 'source', completed: 0, total: 1, chunks: 0, message: '测试任务' }));
 const operations = [];
+Object.assign(jobs.find(job => job.id === 'running'), { total_chunks: 143, processed_chunks: 20, vectorized_chunks: 0 });
 const kbs = [{ id: 'kb', name: '保留知识库', status: 'ready', documents: 1, concepts: 23 }];
 const response = data => ({ ok: true, status: 200, json: async () => structuredClone(data) });
 globalThis.fetch = async (url, options={}) => {
@@ -44,6 +45,12 @@ test('only failed or partial jobs expose restart and delete controls', () => {
   assert.equal(document.querySelectorAll('[data-action="delete-job"]').length, 5);
   assert.equal(document.querySelector('[data-action="restart-job"][data-id="running"]'), null);
   assert.equal(document.querySelector('[data-action="delete-job"][data-id="complete"]'), null);
+});
+
+test('long-document progress reflects saved chunks before file completion', () => {
+  const running = [...document.querySelectorAll('.job')].find(job => job.querySelector('strong').textContent === '处理中');
+  assert.equal(running.querySelector('progress').max, 286);
+  assert.equal(running.querySelector('progress').value, 20);
 });
 
 test('stored source restart posts once and refreshes queued task', async () => {

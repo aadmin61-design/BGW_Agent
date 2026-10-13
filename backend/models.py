@@ -58,6 +58,33 @@ class Document(Base):
     digest: Mapped[str] = mapped_column(String(64))
 
 
+class ImportCheckpoint(Base):
+    __tablename__ = "import_checkpoints"
+    __table_args__ = (UniqueConstraint("kb_id", "digest"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    kb_id: Mapped[str] = mapped_column(ForeignKey("knowledge_bases.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[str | None] = mapped_column(ForeignKey("import_jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    digest: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(255))
+    parser_version: Mapped[int] = mapped_column(Integer, default=2)
+    total_chunks: Mapped[int] = mapped_column(Integer)
+    processed_chunks: Mapped[int] = mapped_column(Integer, default=0)
+    vectorized_chunks: Mapped[int] = mapped_column(Integer, default=0)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ImportPiece(Base):
+    __tablename__ = "import_pieces"
+    checkpoint_id: Mapped[str] = mapped_column(ForeignKey("import_checkpoints.id", ondelete="CASCADE"), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 预留稳定的向量ID，缓存尚未成为正式知识点，不向学习计划暴露。
+    chunk_id: Mapped[str] = mapped_column(String(32), default=uid)
+    text: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(500))
+    concepts: Mapped[list] = mapped_column(JSON, default=list)
+
+
 class Chunk(Base):
     __tablename__ = "chunks"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)

@@ -125,6 +125,22 @@ def test_wrong_answer_reschedule_and_repeat_submit_idempotent(api):
         assert p.mistakes == 1 and p.next_review == main.today() + timedelta(days=1)
 
 
+def test_knowledge_integrity_is_admin_only_and_waits_for_completion(api, monkeypatch):
+    from backend import vectors
+    client, factory, ids = api
+    monkeypatch.setattr(vectors, "vector_store", lambda: SimpleNamespace(verify_chunks=lambda rows:
+        {"expected": len(rows), "missing": 0, "mismatched": 0, "ok": True}))
+    login(client)
+    assert client.get(f"/api/admin/knowledge-bases/{ids.kb}/integrity").status_code == 403
+    login(client, "test_admin")
+    response = client.get(f"/api/admin/knowledge-bases/{ids.kb}/integrity")
+    assert response.status_code == 200 and response.json()["vectors"]["expected"] == 1
+    assert "text" not in response.json() and response.json()["concepts"] == 15
+    with factory() as db:
+        db.get(KnowledgeBase, ids.kb).status = "indexing"; db.commit()
+    assert client.get(f"/api/admin/knowledge-bases/{ids.kb}/integrity").status_code == 409
+
+
 def test_generation_status_is_private_and_duplicate_clicks_reuse_job(api, monkeypatch):
     client, factory, ids = api; login(client)
     item = create_lesson(client)
