@@ -1,0 +1,13 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#88AC83</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#102E34</item>
+        <item name="android:navigationBarColor">#102E34</item>
+        <item name="android:windowBackground">#102E34</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <color name="brand">#102E34</color>
+    <string name="app_name">知序</string>
+</resources>

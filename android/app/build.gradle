@@ -1,0 +1,45 @@
+plugins { id 'com.android.application' }
+
+def endpoint = providers.gradleProperty('DEFAULT_SERVER_URL').get()
+def endpointUri = new URI(endpoint)
+if (endpointUri.scheme != 'https' || !endpointUri.host || endpointUri.userInfo || endpointUri.query || endpointUri.fragment)
+    throw new GradleException('默认服务器必须是无凭据的HTTPS地址')
+
+android {
+    namespace 'com.zhixu.learning'
+    compileSdk 36
+    buildToolsVersion '35.0.0'
+    defaultConfig {
+        applicationId 'com.zhixu.learning'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+        buildConfigField 'String', 'DEFAULT_SERVER_URL', '"' + endpoint.replace('\\','\\\\').replace('"','\\"') + '"'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    signingConfigs {
+        release {
+            // 签名私钥仅通过CI密钥注入，不进入源码或APK资源。
+            if (System.getenv('ZHIXU_KEYSTORE_PATH')) {
+                storeFile file(System.getenv('ZHIXU_KEYSTORE_PATH'))
+                storePassword System.getenv('ZHIXU_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ZHIXU_KEY_ALIAS')
+                keyPassword System.getenv('ZHIXU_KEYSTORE_PASSWORD')
+                storeType 'PKCS12'
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            // 未获签名授权时仅生成可审查的未签名产物。
+            if (System.getenv('ZHIXU_KEYSTORE_PATH')) signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    lint { abortOnError true; checkReleaseBuilds true }
+}
+dependencies { testImplementation 'junit:junit:4.13.2' }

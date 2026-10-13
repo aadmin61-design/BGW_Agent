@@ -1,0 +1,8 @@
+# 构建工具清单；本机未安装，不自动创建环境。
+# 使用既有Android Studio环境或GitHub Ubuntu 24.04托管机器。
+JDK == 17
+Android SDK Platform == android-36
+Android SDK Build Tools == 35.0.0
+Gradle == 8.13
+Android Gradle Plugin == 8.13.2
+JUnit == 4.13.2

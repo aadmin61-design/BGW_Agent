@@ -1,0 +1,71 @@
+name: Build Zhixu Android
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use existing runner Android tools
+        shell: bash
+        run: |
+          # 使用托管机器现成的JDK和SDK，不安装或改动本机开发环境。
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+          chmod +x android/gradlew
+      - name: Prepare authorised signing when provided
+        shell: bash
+        env:
+          STORE_B64: ${{ secrets.ZHIXU_SIGNING_STORE }}
+          ZHIXU_KEYSTORE_PASSWORD: ${{ secrets.ZHIXU_KEYSTORE_PASSWORD }}
+          ZHIXU_KEY_ALIAS: ${{ secrets.ZHIXU_KEY_ALIAS }}
+        run: |
+          if [ -n "$STORE_B64" ]; then
+            printf '%s' "$STORE_B64" | base64 --decode > "$RUNNER_TEMP/zhixu.p12"
+            chmod 600 "$RUNNER_TEMP/zhixu.p12"
+            echo "ZHIXU_KEYSTORE_PATH=$RUNNER_TEMP/zhixu.p12" >> "$GITHUB_ENV"
+          fi
+      - name: Test, lint and build
+        working-directory: android
+        env:
+          ZHIXU_KEYSTORE_PASSWORD: ${{ secrets.ZHIXU_KEYSTORE_PASSWORD }}
+          ZHIXU_KEY_ALIAS: ${{ secrets.ZHIXU_KEY_ALIAS }}
+        run: ./gradlew --no-daemon --max-workers=2 testReleaseUnitTest lintRelease assembleRelease
+      - name: Verify APK and create delivery metadata
+        shell: bash
+        run: |
+          mkdir -p delivery
+          APK=$(find android/app/build/outputs/apk/release -name '*.apk' -print -quit)
+          if [ -n "${ZHIXU_KEYSTORE_PATH:-}" ]; then
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+            cp "$APK" delivery/zhixu.apk
+          else
+            cp "$APK" delivery/zhixu-unsigned.apk
+          fi
+          sha256sum delivery/*.apk > delivery/SHA256SUMS.txt
+          ls -lh delivery/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zhixu-android
+          path: delivery/
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-check-reports
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/
+          retention-days: 14
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/zhixu.p12"
