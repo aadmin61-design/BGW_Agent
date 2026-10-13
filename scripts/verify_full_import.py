@@ -16,7 +16,7 @@ from backend.security import passwords, token
 from backend.main import snapshot_of, today
 
 
-def verify(kb_id, path, model=False):
+def verify(kb_id, path, model=False, partial=False):
     factory = session_factory()
     pieces = parse_document(path)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -26,14 +26,18 @@ def verify(kb_id, path, model=False):
         doc = db.scalar(select(Document).where(Document.kb_id == kb_id, Document.digest == digest))
         assert doc, 'original_hash_mismatch'
         chunks = list(db.scalars(select(Chunk).where(Chunk.doc_id == doc.id)))
-        assert len(chunks) == len(pieces), 'chunk_count_mismatch'
+        total = len(pieces)
+        assert 0 < len(chunks) <= total and (partial or len(chunks) == total), 'chunk_count_mismatch'
+        # 暂停发布只核对连续前缀，明确记录未处理的片段，不冒充整篇已完成。
+        pieces = pieces[:len(chunks)]
         by_source = {chunk.source: chunk for chunk in chunks}
         assert len(by_source) == len(pieces), 'duplicate_chunk_source'
         assert all(source in by_source and by_source[source].text == text for text, source in pieces), 'original_text_mismatch'
         checkpoint = db.get(ImportCheckpoint, doc.id)
-        assert checkpoint and checkpoint.completed
+        assert checkpoint and (partial or checkpoint.completed)
         assert checkpoint.processed_chunks == checkpoint.vectorized_chunks == len(pieces)
-        assert db.scalar(select(func.count()).select_from(ImportPiece).where(ImportPiece.checkpoint_id == doc.id)) == 0
+        cached_count = db.scalar(select(func.count()).select_from(ImportPiece).where(ImportPiece.checkpoint_id == doc.id))
+        assert cached_count == (len(pieces) if partial and not checkpoint.completed else 0)
         concepts = list(db.scalars(select(Concept).where(Concept.kb_id == kb_id)))
         assert concepts, 'no_concepts'
         ordered = sorted(concepts, key=lambda c: (c.depth, c.title, c.id))
@@ -44,8 +48,9 @@ def verify(kb_id, path, model=False):
             seen.add(concept.id)
         administrator = db.scalar(select(User).where(User.is_admin.is_(True)))
         report = {'kb_id': kb_id, 'sha256': digest, 'original_bytes': path.stat().st_size,
-                  'chunks': len(chunks), 'concepts': len(concepts), 'text_matches_original': True,
-                  'checkpoint_complete': True, 'dependency_graph': 'passed',
+                  'chunks': len(chunks), 'total_chunks': total, 'pending_chunks': total-len(chunks),
+                  'concepts': len(concepts), 'text_matches_original': True,
+                  'checkpoint_complete': checkpoint.completed, 'dependency_graph': 'passed',
                   'categories': dict(Counter(c.category for c in concepts)),
                   'depths': dict(Counter(c.depth for c in concepts))}
     with httpx.Client(base_url='http://127.0.0.1:8001', trust_env=False, timeout=30) as client:
@@ -103,10 +108,11 @@ if __name__ == '__main__':
     parser.add_argument('--kb-id', required=True)
     parser.add_argument('--path', required=True, type=Path)
     parser.add_argument('--model', action='store_true')
+    parser.add_argument('--partial', action='store_true')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
     try:
-        report = verify(args.kb_id, args.path, args.model)
+        report = verify(args.kb_id, args.path, args.model, args.partial)
         if args.report:
             args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
         print(json.dumps(report, ensure_ascii=False))

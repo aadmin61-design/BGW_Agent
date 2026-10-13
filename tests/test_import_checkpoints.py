@@ -85,3 +85,47 @@ def test_vector_failure_keeps_extraction_cache_and_does_not_publish(importer, mo
     with factory() as db:
         assert db.get(ImportJob, job_id).status == "completed"
         assert db.scalar(select(func.count()).select_from(Document)) == 1
+
+
+def test_publish_saved_then_resume_preserves_existing_vectors_and_concepts(importer, monkeypatch):
+    factory, path, (_, job_id), extract, calls, deleted = importer
+    def stop_at_last(text, titles):
+        if text == "丙":
+            raise RuntimeError("暂停")
+        return extract(text, titles)
+    monkeypatch.setattr(ingestion, "extract_concepts", stop_at_last)
+    ingestion._run_import(job_id, [path])
+    ingestion._publish_saved(job_id)
+    # 重复发布幂等，缓存仍保留；剩余片段尚未被当作完成。
+    ingestion._publish_saved(job_id)
+    with factory() as db:
+        checkpoint = db.scalar(select(ImportCheckpoint))
+        assert not checkpoint.completed and checkpoint.vectorized_chunks == 2
+        assert db.get(ImportJob, job_id).status == "partial"
+        assert db.get(ImportJob, job_id).chunks == 2
+        assert db.scalar(select(func.count()).select_from(Chunk)) == 2
+        assert db.scalar(select(func.count()).select_from(Concept)) == 2
+        assert db.scalar(select(func.count()).select_from(ImportPiece)) == 2
+        existing = set(db.scalars(select(Chunk.id)))
+    monkeypatch.setattr(ingestion, "extract_concepts", extract)
+    def unavailable(chunks):
+        raise RuntimeError("vector_unavailable")
+    monkeypatch.setattr(ingestion, "vector_store", lambda: SimpleNamespace(upsert=unavailable,
+        delete_chunks=lambda ids: deleted.extend(ids)))
+    ingestion._run_import(job_id, [path])
+    assert len(deleted) == 1 and not existing.intersection(deleted)
+    with factory() as db:
+        assert db.get(ImportJob, job_id).status == "partial"
+        assert db.scalar(select(func.count()).select_from(Chunk)) == 2
+        assert db.scalar(select(ImportCheckpoint)).vectorized_chunks == 2
+    monkeypatch.setattr(ingestion, "vector_store", lambda: SimpleNamespace(upsert=lambda chunks: None,
+        delete_chunks=lambda ids: None))
+    ingestion._run_import(job_id, [path])
+    with factory() as db:
+        assert db.get(ImportJob, job_id).status == "completed"
+        assert db.get(ImportJob, job_id).chunks == 3
+        assert db.scalar(select(ImportCheckpoint)).completed
+        assert db.scalar(select(func.count()).select_from(Chunk)) == 3
+        assert db.scalar(select(func.count()).select_from(Concept)) == 3
+        assert db.scalar(select(func.count()).select_from(ImportPiece)) == 0
+    assert calls.count("甲") == calls.count("乙") == 1

@@ -59,6 +59,26 @@ def login(client, username="alice"):
     assert response.status_code == 200
 
 
+def test_only_admin_can_publish_cached_prefix_and_running_job_cannot_repeat(api, monkeypatch):
+    from backend.models import ImportCheckpoint
+    client, factory, ids = api
+    with factory() as db:
+        job = ImportJob(kb_id=ids.kb, total=1, status="failed")
+        db.add(job); db.flush()
+        job_id = job.id
+        db.add(ImportCheckpoint(kb_id=ids.kb, job_id=job_id, digest="b" * 64,
+            name="long.docx", total_chunks=3, processed_chunks=2))
+        db.commit()
+    called = []
+    monkeypatch.setattr(main, "run_publish_saved", lambda job_id: called.append(job_id))
+    login(client)
+    assert client.post(f"/api/admin/jobs/{job_id}/publish-saved").status_code == 403
+    login(client, "test_admin")
+    assert client.post(f"/api/admin/jobs/{job_id}/publish-saved").status_code == 202
+    assert called == [job_id]
+    assert client.post(f"/api/admin/jobs/{job_id}/publish-saved").status_code == 409
+
+
 def create_lesson(client):
     response = client.post("/api/plans/lesson", json={})
     assert response.status_code == 200

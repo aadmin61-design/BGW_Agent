@@ -172,10 +172,12 @@ def _extract_retry(text, titles, extractor):
 
 def _prepare_checkpoint(job_id, kb_id, path, digest, pieces):
     with session_factory()() as db:
-        if db.scalar(select(Document.id).where(Document.kb_id == kb_id, Document.digest == digest)):
-            return None
+        document = db.scalar(select(Document.id).where(Document.kb_id == kb_id, Document.digest == digest))
         checkpoint = db.scalar(select(ImportCheckpoint).where(ImportCheckpoint.kb_id == kb_id,
             ImportCheckpoint.digest == digest))
+        # 管理员可主动发布已抽取前缀；有Document并不意味着剩余片段已完成。
+        if document and (checkpoint is None or checkpoint.completed):
+            return None
         if not checkpoint:
             checkpoint = ImportCheckpoint(kb_id=kb_id, job_id=job_id, digest=digest,
                 name=path.name, total_chunks=len(pieces), parser_version=PARSER_VERSION)
@@ -183,6 +185,8 @@ def _prepare_checkpoint(job_id, kb_id, path, digest, pieces):
         else:
             checkpoint.job_id = job_id
             if checkpoint.parser_version != PARSER_VERSION or checkpoint.total_chunks != len(pieces):
+                if document:
+                    raise ValueError("已部分发布的文档解析规则变化，请使用新知识库重新导入")
                 # 解析规则变化后不能沿用旧位置的缓存，正式知识仍不受影响。
                 db.execute(delete(ImportPiece).where(ImportPiece.checkpoint_id == checkpoint.id))
                 checkpoint.parser_version = PARSER_VERSION
@@ -231,14 +235,16 @@ def _extract_document(job_id, kb_id, checkpoint_id, pieces):
         pool.shutdown(wait=False, cancel_futures=True)
 
 
-def _publish_document(job_id, kb_id, checkpoint_id):
+def _publish_document(job_id, kb_id, checkpoint_id, partial=False):
     with session_factory()() as db:
         checkpoint = db.get(ImportCheckpoint, checkpoint_id)
         saved = list(db.scalars(select(ImportPiece).where(ImportPiece.checkpoint_id == checkpoint_id)
             .order_by(ImportPiece.ordinal)))
-        if len(saved) != checkpoint.total_chunks or [piece.ordinal for piece in saved] != list(range(checkpoint.total_chunks)):
+        expected = len(saved) if partial else checkpoint.total_chunks
+        if not saved or len(saved) != expected or [piece.ordinal for piece in saved] != list(range(expected)):
             raise ValueError("片段尚未完整提取，不能发布文档")
         name, digest = checkpoint.name, checkpoint.digest
+        existing_ids = set(db.scalars(select(Chunk.id).where(Chunk.doc_id == checkpoint_id)))
     chunks = [Chunk(id=piece.chunk_id, kb_id=kb_id, doc_id=checkpoint_id,
                     text=piece.text, source=piece.source) for piece in saved]
     attempted = []
@@ -253,9 +259,10 @@ def _publish_document(job_id, kb_id, checkpoint_id):
                 db.get(ImportJob, job_id).message = f"正在写入 {name} 的向量：{min(offset + 8, len(chunks))}/{len(chunks)} 片段"
                 db.commit()
         with session_factory()() as db:
-            db.add(Document(id=checkpoint_id, kb_id=kb_id, name=name, digest=digest))
+            if db.get(Document, checkpoint_id) is None:
+                db.add(Document(id=checkpoint_id, kb_id=kb_id, name=name, digest=digest))
             db.flush()
-            db.add_all(chunks)
+            db.add_all(chunk for chunk in chunks if chunk.id not in existing_ids)
             db.flush()
             titles = set(title.strip().casefold() for title in db.scalars(select(Concept.title).where(Concept.kb_id == kb_id)))
             for piece in saved:
@@ -268,25 +275,73 @@ def _publish_document(job_id, kb_id, checkpoint_id):
                     titles.add(normalized)
             db.flush()
             resolve_dependencies(list(db.scalars(select(Concept).where(Concept.kb_id == kb_id))))
-            db.get(ImportCheckpoint, checkpoint_id).completed = True
-            db.get(ImportJob, job_id).chunks += len(chunks)
+            db.get(ImportCheckpoint, checkpoint_id).completed = not partial
+            published_docs = select(ImportCheckpoint.id).where(ImportCheckpoint.job_id == job_id)
+            db.get(ImportJob, job_id).chunks = db.scalar(select(func.count()).select_from(Chunk)
+                .where(Chunk.doc_id.in_(published_docs)))
             # 与正式文档同一次提交清理临时结果，提交失败仍可恢复全部抽取进度。
-            db.execute(delete(ImportPiece).where(ImportPiece.checkpoint_id == checkpoint_id))
+            if not partial:
+                db.execute(delete(ImportPiece).where(ImportPiece.checkpoint_id == checkpoint_id))
             db.commit()
     except Exception as error:
         # 提交确认丢失时先检查SQL结果，不能删除实际上已经发布的向量。
         with session_factory()() as db:
-            committed = db.get(Document, checkpoint_id) is not None
+            committed_ids = set(db.scalars(select(Chunk.id).where(Chunk.doc_id == checkpoint_id)))
+            completed = db.get(ImportCheckpoint, checkpoint_id).completed
+            committed = {chunk.id for chunk in chunks}.issubset(committed_ids) and (partial or completed)
         if committed:
             return
         try:
-            vector_store().delete_chunks(attempted)
+            # 续跑失败不能删除之前已发布并供用户学习的片段向量。
+            vector_store().delete_chunks([value for value in attempted if value not in existing_ids])
         except Exception:
             pass
         with session_factory()() as db:
-            db.get(ImportCheckpoint, checkpoint_id).vectorized_chunks = 0
+            db.get(ImportCheckpoint, checkpoint_id).vectorized_chunks = len(existing_ids)
             db.commit()
         raise ImportFailure("向量或发布", len(attempted), error) from None
+
+
+def run_publish_saved(job_id):
+    """仅发布缓存，不继续调用抽取模型；保持断点供管理员后续恢复。"""
+    engine = session_factory().kw["bind"]
+    with engine.connect() as lease:
+        lock_name = "bgw_job_" + job_id
+        if lease.scalar(sql_text("SELECT GET_LOCK(:name, 0)"), {"name": lock_name}) != 1:
+            return
+        try:
+            _publish_saved(job_id)
+        finally:
+            lease.execute(sql_text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
+
+
+def _publish_saved(job_id):
+    with session_factory()() as db:
+        job = db.get(ImportJob, job_id)
+        kb_id = job.kb_id
+        saved = [(c.id, c.processed_chunks < c.total_chunks) for c in db.scalars(
+            select(ImportCheckpoint).where(ImportCheckpoint.job_id == job_id,
+                ImportCheckpoint.completed.is_(False), ImportCheckpoint.processed_chunks > 0))]
+        job.status = "running"
+        db.commit()
+    error = None
+    try:
+        for checkpoint_id, partial in saved:
+            _publish_document(job_id, kb_id, checkpoint_id, partial=partial)
+    except Exception as exc:
+        error = exc.detail if isinstance(exc, ImportFailure) else f"发布异常类型{type(exc).__name__}"
+    with session_factory()() as db:
+        job, kb = db.get(ImportJob, job_id), db.get(KnowledgeBase, kb_id)
+        checkpoints = list(db.scalars(select(ImportCheckpoint).where(ImportCheckpoint.job_id == job_id)))
+        extracted = sum(c.processed_chunks for c in checkpoints)
+        total = sum(c.total_chunks for c in checkpoints)
+        job.completed = sum(c.completed for c in checkpoints)
+        has_concepts = db.scalar(select(Concept.id).where(Concept.kb_id == kb_id).limit(1))
+        kb.status = "ready" if has_concepts else "empty"
+        job.status = "partial" if job.completed < job.total or error else "completed"
+        job.message = (f"已暂停后续抽取，已发布{job.chunks}/{total}片段；已保存{extracted}片段，重启任务可继续。"
+            if not error else f"已暂停抽取；{error}，提取缓存已保留。")
+        db.commit()
 
 
 def _run_import(job_id, paths, cleanup=False):

@@ -18,7 +18,7 @@ from .database import get_db, session_factory
 from .models import Base, User, KnowledgeBase, ImportJob, Document, Chunk, Concept, Progress, DailyItem, Conversation, Message, uid
 from .security import passwords, token, current_user, admin_user
 from .scheduler import choose_lessons, review_update, normalize_answer
-from .ingestion import local_files, run_import, SUPPORTED, retry_files, cleanup_uploads
+from .ingestion import local_files, run_import, run_publish_saved, SUPPORTED, retry_files, cleanup_uploads
 from .ai import generate_quiz, tutor_graph, TutorUnavailable
 from .migrations import migrate_message_order, migrate_import_sources
 from .quiz_jobs import QuizService, job_view, next_generation
@@ -40,7 +40,7 @@ def initialize():
                 text("SELECT IS_USED_LOCK(:name)"), {"name": "bgw_job_" + job.id}) is not None:
                 continue
             job.status = "failed"
-            job.message = "服务重启导致导入中断，请重新提交；完整文档会自动去重。"
+            job.message = "服务重启导致导入中断，重启任务可从已保存片段继续；完整文档自动去重。"
         db.commit()
         for kb in db.scalars(select(KnowledgeBase).where(KnowledgeBase.status == "indexing")):
             active = db.scalar(select(ImportJob.id).where(ImportJob.kb_id == kb.id, ImportJob.status.in_(["queued", "running"])))
@@ -384,6 +384,22 @@ def restart_job(job_id: str, background: BackgroundTasks, body: ImportRetryInput
     except ValueError as exc:
         raise HTTPException(409, str(exc))
     return restart_import(db, job, kb, paths, background, "local" if body.path else job.source_kind)
+
+
+@app.post("/api/admin/jobs/{job_id}/publish-saved", status_code=202)
+def publish_saved_job(job_id: str, background: BackgroundTasks,
+                      user: User = Depends(admin_user), db: Session = Depends(get_db)):
+    job, kb = inactive_job(db, job_id)
+    if kb.status in {"indexing", "deleting"}:
+        raise HTTPException(409, "知识库正在处理，请稍后重试。")
+    saved = db.scalar(select(ImportCheckpoint.id).where(ImportCheckpoint.job_id == job.id,
+        ImportCheckpoint.completed.is_(False), ImportCheckpoint.processed_chunks > 0).limit(1))
+    if not saved:
+        raise HTTPException(409, "没有尚待发布的已保存片段。")
+    job.status, job.message, kb.status = "queued", "只发布已保存片段，后续抽取保持暂停。", "indexing"
+    db.commit()
+    background.add_task(run_publish_saved, job.id)
+    return {"job_id": job.id}
 
 
 @app.post("/api/admin/jobs/{job_id}/upload-retry", status_code=202)
