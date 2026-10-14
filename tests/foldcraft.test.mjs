@@ -68,6 +68,26 @@ test('background lifecycle pauses video decoding and foreground resumes playback
   assert.equal(plays, playedBefore + 1);
 });
 
+test('speed changes preserve pause state and persist for subsequent visits', async () => {
+  const video = document.querySelector('video');
+  await click('button[aria-label="暂停背景视频"]');
+  const playsBeforeChange = plays;
+  await click('button[aria-label="背景视频播放速度"]');
+  assert.ok(document.querySelector('.speed-arrow.is-open'));
+  await click('[role="menuitemradio"]');
+  assert.equal(document.querySelector('[aria-label="背景视频播放速度"]').getAttribute('aria-expanded'), 'false');
+  assert.equal(video.playbackRate, 0.5);
+  assert.equal(video.defaultPlaybackRate, 0.5);
+  assert.equal(window.localStorage.getItem('zhixu-video-speed'), '0.5');
+  assert.equal(plays, playsBeforeChange);
+  assert.ok(document.querySelector('button[aria-label="播放背景视频"]'));
+  await click('button[aria-label="播放背景视频"]');
+  assert.equal(video.playbackRate, 0.5);
+  // 恢复默认速度，避免影响后续组件场景。
+  await click('button[aria-label="背景视频播放速度"]');
+  await click('[role="menuitemradio"]:nth-child(3)');
+});
+
 test('mobile menu toggles icons, manages focus and closes with Escape', async () => {
   await click('#mobile-menu-toggle');
   assert.equal(document.querySelector('#mobile-menu-toggle').getAttribute('aria-expanded'), 'true');

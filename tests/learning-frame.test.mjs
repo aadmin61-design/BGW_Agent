@@ -46,13 +46,13 @@ test('hero opens daily learning and knowledge navigation retains the business mo
   assert.equal(location.hash, '#lesson');
   assert.equal(document.querySelector('.learning-host').hidden, false);
   assert.ok(document.querySelector('#learning-app').textContent.includes('顺着脉络'));
-  await click('nav[aria-label="主导航"] a[href="#knowledge"]');
+  await click('.workspace-tabs [data-nav="knowledge"]');
   assert.equal(location.hash, '#knowledge');
   assert.ok(document.querySelector('#learning-app').textContent.includes('你的知识，从这里出发'));
 });
 
 test('question, next question and independent chat still work inside React layout', async () => {
-  await click('nav[aria-label="主导航"] a[href="#lesson"]');
+  await click('.workspace-tabs [data-nav="lesson"]');
   const lesson = JSON.parse(localStorage.getItem('bgw-demo')).lessons.find(item => !item.submitted);
   await click(`#learning-app [data-item="${lesson.id}"]`);
   assert.ok(document.querySelector('#learning-app').textContent.includes('独立对话'));
@@ -69,6 +69,23 @@ test('back navigation synchronizes route and business content without replacing 
   assert.equal(location.hash, '#home');
   assert.equal(document.querySelector('.learning-host').hidden, true);
   assert.ok(document.querySelector('h1').textContent.includes('学懂一个问题'));
+});
+
+test('profile entry edits display information and keeps login account read-only', async () => {
+  globalThis.FormData = window.FormData;
+  await click('.foldcraft-navbar [aria-label="个人资料"]');
+  assert.equal(location.hash, '#profile');
+  const form = document.querySelector('#profile-form');
+  assert.equal(form.querySelector('input:disabled').value, '学习者');
+  assert.equal(form.querySelector('input[type="password"]'), null);
+  form.querySelector('[name="display_name"]').value = '新的学习名字';
+  form.querySelector('[name="bio"]').value = '喜欢Java，也喜欢阅读';
+  await act(async () => { form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); await settle(); });
+  assert.equal(document.querySelector('.profile-name').textContent, '新的学习名字');
+  assert.equal(document.querySelector('#profile-form [name="bio"]').value, '喜欢Java，也喜欢阅读');
+  await click('.workspace-tabs [data-nav="dashboard"]');
+  await click('.profile-link');
+  assert.equal(document.querySelector('#profile-form [name="display_name"]').value, '新的学习名字');
 });
 
 test.after(async () => { await act(async () => root.unmount()); globalThis.setInterval = nativeSetInterval; dom.window.close(); });

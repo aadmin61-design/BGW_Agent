@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Menu, X, Pause, Play, RotateCw, BookOpen, LogOut } from 'lucide-react';
+import { ArrowRight, Menu, X, Pause, Play, RotateCw, BookOpen, LogOut, ChevronDown } from 'lucide-react';
 
 // 背景视频保存在项目内，通过现有静态资源服务播放，无需连接外部视频站点。
 export const VIDEO_URL = '/assets/media/learning-background.mp4';
@@ -9,8 +9,51 @@ export const NAVIGATION = [
   { page: 'knowledge', label: '知识库' },
   { page: 'memory', label: '记忆计划' },
 ];
-const knownPages = new Set(['home', 'dashboard', 'lesson', 'quiz', 'memory', 'bookmarks', 'knowledge', 'admin', 'auth']);
+const knownPages = new Set(['home', 'dashboard', 'lesson', 'quiz', 'memory', 'bookmarks', 'knowledge', 'admin', 'auth', 'profile']);
 const currentPage = () => { const page = window.location.hash.slice(1); return knownPages.has(page) ? page : 'home'; };
+const VIDEO_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+function savedVideoSpeed() {
+  // 浏览器禁止存储或旧配置不合法时使用正常速度，不影响页面加载。
+  try {
+    const rate = Number(window.localStorage.getItem('zhixu-video-speed') || 1);
+    return VIDEO_SPEEDS.includes(rate) ? rate : 1;
+  } catch { return 1; }
+}
+
+function VideoSpeed({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const wrapper = useRef(null), trigger = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    wrapper.current.querySelector('[aria-checked="true"]')?.focus();
+    const outside = event => { if (!wrapper.current?.contains(event.target)) setOpen(false); };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [open]);
+  function close() { setOpen(false); trigger.current?.focus(); }
+  function keyDown(event) {
+    if (event.key === 'Escape') { event.preventDefault(); close(); }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (!open) { setOpen(true); return; }
+    const items = [...wrapper.current.querySelectorAll('[role="menuitemradio"]')];
+    const index = items.indexOf(document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 :
+      (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  }
+  return <div className="video-speed" ref={wrapper} onKeyDown={keyDown}
+    onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+    <button ref={trigger} type="button" className="video-speed-toggle" aria-label="背景视频播放速度"
+      aria-haspopup="menu" aria-expanded={open} aria-controls="video-speed-menu" onClick={() => setOpen(!open)}>
+      <span>{value}×</span><ChevronDown size={14} aria-hidden="true" className={open ? 'speed-arrow is-open' : 'speed-arrow'} />
+    </button>
+    {open && <div id="video-speed-menu" role="menu" aria-label="播放速度" className="video-speed-menu">
+      {VIDEO_SPEEDS.map(rate => <button key={rate} type="button" role="menuitemradio" aria-checked={rate === value}
+        onClick={() => { onChange(rate); close(); }}>{rate}×</button>)}
+    </div>}
+  </div>;
+}
 
 export function HeroContent({ onNavigate, visible }) {
   return <main hidden={!visible} className="foldcraft-hero-content relative z-10 flex h-[calc(100vh-80px)] flex-col justify-between px-6 pb-10 pt-12 sm:pb-12 sm:pt-16 md:px-12 md:pb-16 md:pt-20 lg:px-16">
@@ -55,11 +98,12 @@ export function MobileMenu({ open, onClose, onNavigate }) {
   </div>;
 }
 
-export default function App({ loadController = () => import('/assets/app.js?v=20261013-android-client-2') }) {
+export default function App({ loadController = () => import('/assets/app.js?v=20261014-profile-1') }) {
   const [page, setPage] = useState(currentPage);
   const [user, setUser] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(savedVideoSpeed);
   const [videoFailed, setVideoFailed] = useState(false);
   const [bridgeFailed, setBridgeFailed] = useState(false);
   const bridge = useRef(null), video = useRef(null), toggle = useRef(null);
@@ -101,6 +145,15 @@ export default function App({ loadController = () => import('/assets/app.js?v=20
     });
     return () => { active = false; };
   }, [paused, videoFailed]);
+
+  useEffect(() => {
+    // 只改变播放速度，不改变暂停状态；重载视频也保留用户选定的速度。
+    if (video.current) {
+      video.current.defaultPlaybackRate = playbackRate;
+      video.current.playbackRate = playbackRate;
+    }
+    try { window.localStorage.setItem('zhixu-video-speed', String(playbackRate)); } catch {}
+  }, [playbackRate, videoFailed]);
 
   useEffect(() => {
     const visibility = event => {
@@ -148,14 +201,16 @@ export default function App({ loadController = () => import('/assets/app.js?v=20
     <header className="foldcraft-navbar relative z-30 flex min-h-[80px] items-center justify-between px-6 py-5 md:px-12 lg:px-16">
       <div className="flex items-center">
         <a href="#home" onClick={event => { event.preventDefault(); navigate('home'); }} aria-label="知序首页" className="inline-flex items-center gap-2.5 text-lg font-semibold tracking-tight text-white sm:text-xl"><BookOpen size={20} strokeWidth={1.5} aria-hidden="true" /><span>知序</span></a>
-        <nav aria-label="主导航" className="ml-10 hidden items-center gap-8 md:flex">
+        {/* 学习页面使用完整的功能导航，首页才显示顶部快捷导航。 */}
+        {home && <nav aria-label="主导航" className="ml-10 hidden items-center gap-8 md:flex">
           {NAVIGATION.map(link => <a key={link.page} href={`#${link.page}`} onClick={event => { event.preventDefault(); navigate(link.page); }} className={`text-sm transition-colors hover:text-white ${page === link.page ? 'text-white' : 'text-white/80'}`}>{link.label}</a>)}
-        </nav>
+        </nav>}
       </div>
       <div className="hidden items-center gap-4 md:flex">
-        {user && <span className="text-xs text-white/60">{user.username}</span>}
-        {user && <button type="button" onClick={logout} className="p-2 text-white/60 transition-colors hover:text-white" aria-label="退出登录"><LogOut size={16} aria-hidden="true" /></button>}
-        <button type="button" onClick={() => navigate('lesson')} className="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-transform hover:scale-105">进入学习空间</button>
+        {/* 学习页面由下方导航栏统一显示账号；首页保留账号入口，避免重复。 */}
+        {home && user && <button type="button" onClick={() => navigate('profile')} className="home-profile" aria-label="个人资料">{user.display_name || user.username}</button>}
+        {home && user && <button type="button" onClick={logout} className="p-2 text-white/60 transition-colors hover:text-white" aria-label="退出登录"><LogOut size={16} aria-hidden="true" /></button>}
+        {home && <button type="button" onClick={() => navigate('lesson')} className="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-transform hover:scale-105">进入学习空间</button>}
       </div>
       <button ref={toggle} id="mobile-menu-toggle" type="button" onClick={() => setMobileMenuOpen(open => !open)} aria-label={mobileMenuOpen ? '关闭导航' : '打开导航'} aria-expanded={mobileMenuOpen} aria-controls="mobile-menu" className="relative z-50 flex h-10 w-10 items-center justify-center text-white transition-transform active:scale-90 md:hidden">
         <Menu size={22} aria-hidden="true" className={`absolute transition-all duration-300 ${mobileMenuOpen ? 'rotate-90 scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
@@ -166,6 +221,7 @@ export default function App({ loadController = () => import('/assets/app.js?v=20
     <HeroContent onNavigate={navigate} visible={home} />
     <div hidden={lite} className={`video-controls flex items-center gap-3 ${home ? 'is-home' : 'is-workspace'}`}>
       <span hidden={!home} className="hidden text-[10px] tracking-[.18em] text-white/60 sm:block">LEARN. CONNECT. GROW.</span>
+      <VideoSpeed value={playbackRate} onChange={setPlaybackRate} />
       <button type="button" onClick={togglePlayback} aria-label={videoFailed ? '重新加载背景视频' : paused ? '播放背景视频' : '暂停背景视频'} aria-pressed={paused} title={videoFailed ? '重新加载背景视频' : paused ? '播放背景视频' : '暂停背景视频'} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-black/15 text-white/90 transition-colors hover:bg-white/15">
         {videoFailed ? <RotateCw size={12} aria-hidden="true" /> : paused ? <Play size={12} aria-hidden="true" /> : <Pause size={12} aria-hidden="true" />}
       </button>

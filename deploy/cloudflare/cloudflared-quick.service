@@ -1,8 +1,8 @@
 [Unit]
 Description=Zhixu temporary Cloudflare HTTPS tunnel
 After=network-online.target nginx.service zhixu.service
-Wants=network-online.target
-Requires=nginx.service
+# Nginx更新时允许短暂断开源站，避免强依赖连带重启隧道并更换网址。
+Wants=network-online.target nginx.service
 
 [Service]
 Type=simple

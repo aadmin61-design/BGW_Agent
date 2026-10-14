@@ -3,13 +3,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from collections import defaultdict, deque
+import hashlib
 import asyncio
 import time
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFile, File, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from sqlalchemy import select, func, delete, text
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -22,7 +23,8 @@ from .ingestion import local_files, run_import, run_publish_saved, SUPPORTED, re
 from .ai import generate_quiz, tutor_graph, TutorUnavailable
 from .migrations import migrate_message_order, migrate_import_sources
 from .quiz_jobs import QuizService, job_view, next_generation
-from .models import QuizGeneration, ImportCheckpoint
+from .models import QuizGeneration, ImportCheckpoint, UserProfile
+from .profile import normalise_avatar
 
 
 def today():
@@ -166,8 +168,28 @@ class SaveInput(BaseModel):
     saved: bool = True
 
 
-def user_view(user):
-    return {"id": user.id, "username": user.username, "is_admin": user.is_admin}
+class ProfileInput(BaseModel):
+    # 明确拒绝账号、密码、用户ID和管理权限等额外字段。
+    model_config = ConfigDict(extra="forbid")
+    display_name: str = Field(min_length=1, max_length=40)
+    bio: str = Field(default="", max_length=500)
+    avatar_png: str | None = Field(default=None, max_length=350000)
+    avatar_remove: bool = False
+
+    @field_validator("display_name")
+    @classmethod
+    def nonempty_name(cls, value):
+        if not value.strip():
+            raise ValueError("名字不能为空")
+        return value.strip()
+
+
+def user_view(user, db=None):
+    profile = db.get(UserProfile, user.id) if db is not None else None
+    return {"id": user.id, "username": user.username, "is_admin": user.is_admin,
+            "display_name": profile.display_name if profile and profile.display_name else user.username,
+            "bio": profile.bio if profile else "",
+            "avatar_url": f"/api/profile/avatar?v={profile.avatar_digest}" if profile and profile.avatar else None}
 
 
 def login_cookie(response, user):
@@ -194,7 +216,7 @@ def register(body: AuthInput, response: Response, db: Session = Depends(get_db))
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "用户名已存在")
-    return user_view(user)
+    return user_view(user, db)
 
 
 @app.post("/api/auth/login")
@@ -205,7 +227,7 @@ def login(body: AuthInput, response: Response, db: Session = Depends(get_db)):
     if not passwords.verify(body.password, stored) or not user:
         raise HTTPException(401, "用户名或密码错误")
     login_cookie(response, user)
-    return user_view(user)
+    return user_view(user, db)
 
 
 @app.post("/api/auth/logout")
@@ -215,8 +237,39 @@ def logout(response: Response):
 
 
 @app.get("/api/auth/me")
-def me(user: User = Depends(current_user)):
-    return user_view(user)
+def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    return user_view(user, db)
+
+
+@app.patch("/api/profile")
+def update_profile(body: ProfileInput, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if body.avatar_remove and body.avatar_png is not None:
+        raise HTTPException(422, "不能同时上传和移除头像")
+    try:
+        avatar = normalise_avatar(body.avatar_png) if body.avatar_png is not None else None
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    # 同一用户从两个标签页首次保存时按用户行串行化，防止重复插入资料。
+    db.execute(select(User.id).where(User.id == user.id).with_for_update())
+    profile = db.get(UserProfile, user.id)
+    if profile is None:
+        profile = UserProfile(user_id=user.id)
+        db.add(profile)
+    # 所有图片校验通过后一次提交；永远只修改当前登录用户的资料。
+    profile.display_name, profile.bio = body.display_name, body.bio.strip()
+    if avatar is not None or body.avatar_remove:
+        profile.avatar = avatar
+        profile.avatar_digest = hashlib.sha256(avatar).hexdigest() if avatar else ""
+    db.commit()
+    return user_view(user, db)
+
+
+@app.get("/api/profile/avatar")
+def profile_avatar(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    profile = db.get(UserProfile, user.id)
+    if profile is None or not profile.avatar:
+        raise HTTPException(404, "尚未设置头像")
+    return Response(content=profile.avatar, media_type="image/png")
 
 
 @app.get("/api/knowledge-bases")

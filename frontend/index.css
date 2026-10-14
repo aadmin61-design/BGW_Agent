@@ -21,10 +21,20 @@ html,body { font-family: 'Geist', sans-serif; }
 .foldcraft-navbar button:not(#mobile-menu-toggle),.foldcraft-hero-content button,#mobile-menu button { background:rgba(255,255,255,.82);border:1px solid rgba(255,255,255,.58);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px); }
 /* 退出图标保留轻量形态，仅将有背景的行动按钮改为玻璃。 */
 .foldcraft-navbar button[aria-label="退出登录"] { background:transparent;border-color:transparent; }
+.foldcraft-navbar .home-profile{background:transparent;border:0;box-shadow:none;color:rgba(255,255,255,.8);font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .video-controls { position:fixed;z-index:15;right:20px;bottom:18px; }
 .video-controls.is-home { right:24px;bottom:40px; }
 .video-controls button { background:rgba(10,29,34,.30);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 4px 18px #06171c26; }
 .video-controls button:focus-visible { outline:2px solid white;outline-offset:4px; }
+.video-speed { position:relative;color:#f2f8f7;font-size:12px; }
+/* 速度入口只显示文字与箭头，展开菜单向上出现，不为入口添加底框。 */
+.video-controls .video-speed-toggle,.video-controls .video-speed-menu button { background:transparent;border:0;border-radius:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none; }
+.video-speed-toggle { display:flex;align-items:center;gap:5px;min-height:32px;padding:4px;text-shadow:0 1px 3px rgba(0,0,0,.75); }
+.speed-arrow { transition:transform .2s;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7)); }.speed-arrow.is-open{transform:rotate(180deg)}
+.video-speed-menu { position:absolute;right:0;bottom:calc(100% + 8px);width:90px;padding:5px;background:rgba(15,35,40,.94);border:1px solid rgba(255,255,255,.22);border-radius:10px;box-shadow:0 8px 26px #0003;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px); }
+.video-speed-menu button { display:block;min-height:34px;width:100%;color:white;font-size:12px; }
+.video-controls .video-speed-menu button:hover,.video-controls .video-speed-menu button[aria-checked="true"]{background:rgba(255,255,255,.15);border-radius:6px}
+@media(max-width:767px){.video-controls button,.video-speed{min-width:44px;min-height:44px}}
 
 /* 统一浅色磨砂玻璃：用半透明底色、模糊与高光边缘分隔内容，保留文字对比度。 */
 .learning-host { position:relative;z-index:10;--bg:transparent;--panel:rgba(249,253,252,.72);--ink:#203b38;--green:#305b51;--line:rgba(52,88,80,.16);--soft:rgba(240,249,245,.48);--muted:#526e67;--glass-border:rgba(255,255,255,.58);--glass-shadow:0 12px 36px rgba(5,25,33,.12),inset 0 1px 0 rgba(255,255,255,.48);color:var(--ink); }
@@ -38,9 +48,24 @@ html,body { font-family: 'Geist', sans-serif; }
 .learning-host .workspace-tabs button:hover{color:#183e34}
 .learning-host .workspace-profile{display:flex;align-items:center;gap:12px;flex-shrink:0;font-size:11px;color:#536b64}
 .learning-host .workspace-profile button{padding:6px}
+.learning-host .workspace-profile .profile-link{display:flex;align-items:center;gap:10px;min-height:44px}
+.profile-name{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.profile-panel{max-width:680px;padding:32px}
+.profile-form{display:grid;gap:18px}
+.profile-form .field{margin:0}
+.profile-form .field input:disabled{opacity:.65;cursor:default}
+.profile-avatar-row{display:flex;align-items:center;gap:24px;margin-bottom:8px}
+.profile-avatar-row>div:last-child{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.profile-avatar-row small{width:100%;font-size:11px;color:var(--muted)}
+.profile-avatar{width:88px;height:88px;flex-shrink:0;border-radius:50%;background:rgba(240,249,225,.7);display:grid;place-items:center;font-size:32px;border:1px solid rgba(255,255,255,.7);overflow:hidden}
+.profile-avatar img{width:100%;height:100%;object-fit:cover}
+.profile-account-note{font-size:11px;color:var(--muted);margin-top:-12px}
+.profile-actions{display:flex;flex-wrap:wrap;gap:12px}
+@media(max-width:600px){.profile-panel{padding:24px 18px}.profile-avatar-row{gap:16px}.profile-avatar{width:72px;height:72px}.workspace-profile .profile-name{display:none}}
 .learning-host .avatar{background:rgba(255,255,255,.40);color:#35554a;border:1px solid var(--glass-border)}
 .learning-host svg.icon{display:inline-block;vertical-align:middle}
-.learning-host .hero { background:rgba(9,31,36,.32);border-color:rgba(255,255,255,.36);box-shadow:var(--glass-shadow);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);min-height:204px; }
+.learning-host .hero { background:rgba(9,31,36,.24);border-color:rgba(255,255,255,.42);box-shadow:var(--glass-shadow);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);min-height:204px; }
 .learning-host .hero-content{max-width:100%}.learning-host .hero h2,.learning-host .hero h2 span{color:white}
 .learning-host .hero p,.learning-host .hero .eyebrow{color:rgba(255,255,255,.84)}
 .learning-host .hero .btn { background:rgba(255,255,255,.82);color:#203b38;border-color:rgba(255,255,255,.72); }
@@ -51,6 +76,11 @@ html,body { font-family: 'Geist', sans-serif; }
 .learning-host .stat-value b{color:#252f25}.learning-host .btn{border-radius:7px}
 .learning-host .panel,.learning-host .stat,.learning-host .review-banner,.learning-host .auth-form-wrap { background:var(--panel);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);-webkit-backdrop-filter:blur(24px) saturate(125%);backdrop-filter:blur(24px) saturate(125%); }
 .learning-host .insight { background:rgba(232,244,219,.66); }
+/* 百分比与提示分别居中，防止较长提示把数字推到左侧。 */
+.ring>div { width:100%;height:100%;display:grid;place-items:center;text-align:center; }
+.ring strong { display:flex;justify-content:center;align-items:baseline; }
+.quote-source { display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;font-style:normal;font-size:11px;line-height:1.8;color:#405d4b; }
+.quote-source a { color:inherit;text-decoration:underline;text-underline-offset:3px; }
 .learning-host .demo-banner{padding:10px 64px;background:rgba(239,249,228,.72);color:#45613b;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-bottom:1px solid var(--glass-border)}
 .learning-host .auth-layout{min-height:calc(100dvh - 80px);display:flex;align-items:center;justify-content:center;padding:40px 20px;background:transparent}
 .learning-host .auth-art{display:none}
@@ -100,6 +130,14 @@ html,body { font-family: 'Geist', sans-serif; }
 @supports (height:100dvh){.foldcraft-root{height:100dvh}.foldcraft-hero-content{height:calc(100dvh - 80px)}#mobile-menu.h-screen{height:100dvh}}
 @media(max-width:1180px){.learning-host .content{padding:30px}.learning-host .workspace-tools,.learning-host .demo-banner{padding-left:30px;padding-right:30px}}
 @media(max-width:720px){.learning-host .content{padding:25px 19px}.learning-host .workspace-tools{padding:0 10px;min-height:58px;gap:8px}.learning-host .workspace-tabs button{padding:19px 10px 17px;font-size:11px}.learning-host .workspace-profile>span{display:none}.learning-host .workspace-profile{gap:4px}.learning-host .demo-banner{padding:9px 19px}.learning-host .auth-form-wrap{padding:30px 25px}.learning-host .auth-layout{padding:30px 19px}}
+/* 手机浏览器同样缩小网格的最小宽度，避免侧栏和统计卡片撑出视口。 */
+@media(max-width:600px){
+  .learning-host .dashboard-grid,.learning-host .right-stack{grid-template-columns:minmax(0,1fr)}
+  .learning-host .right-stack,.learning-host .stat{min-width:0}
+  .learning-host .stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .learning-host .stat-footer{flex-wrap:wrap;gap:4px}
+  .learning-host .stat-head{flex-wrap:wrap;gap:4px}
+}
 @media(min-width:640px){.video-controls.is-home{bottom:48px}}
 @media(min-width:768px){.video-controls.is-home{bottom:64px;right:48px}}
 @media(min-width:1024px){.video-controls.is-home{right:64px}}

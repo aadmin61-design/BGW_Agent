@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, date
 from uuid import uuid4
-from sqlalchemy import String, Text, JSON, Date, DateTime, Integer, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Text, JSON, Date, DateTime, Integer, Boolean, ForeignKey, UniqueConstraint, LargeBinary
+from sqlalchemy.dialects.mysql import MEDIUMBLOB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -23,6 +24,16 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class UserProfile(Base):
+    # 资料与登录凭据独立存储，已有用户无需改写账号、密码或学习记录。
+    __tablename__ = "user_profiles"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(40), default="")
+    bio: Mapped[str] = mapped_column(String(500), default="")
+    avatar: Mapped[bytes | None] = mapped_column(LargeBinary().with_variant(MEDIUMBLOB(), "mysql"), nullable=True)
+    avatar_digest: Mapped[str] = mapped_column(String(64), default="")
 
 
 class KnowledgeBase(Base):

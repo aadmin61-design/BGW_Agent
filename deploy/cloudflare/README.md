@@ -12,6 +12,8 @@
 
 HTTPS入口启用`COOKIE_SECURE=true`，Nginx专用本机入口将外部Host和HTTPS协议传给FastAPI，保留登录及同源校验。旧HTTP/IP入口不能使用Secure会话Cookie。修改服务器私有`.env`前先备份，不输出其他配置及密钥。
 
-`data/cloudflare-tunnel-status.json`是部署时的地址快照。隧道重建后从该服务当前启动日志重新读取并更新地址快照，不能把旧快照当作始终有效的固定网址。不要在公开README中硬编码临时地址。
+`data/cloudflare-tunnel-status.json`是核验时的地址快照。隧道重建后执行`python3 scripts/refresh_tunnel_status.py`，从该服务当前运行实例的日志读取地址，验证HTTPS主页、健康接口与内部隧道状态后原子更新快照；旧记录先备份。历史业务核验结果不会冒用为新网址的核验结果。不能把旧快照当作始终有效的固定网址，不要在公开README中硬编码临时地址。
+
+隧道对Nginx使用`Wants`和启动顺序依赖，不使用`Requires`：系统安全更新重启Nginx时，隧道可等待源站恢复，无需连带重建临时网址。更新此单元后执行`systemctl daemon-reload`即可加载依赖变更，避免为读取地址而重启隧道。系统安全更新仍正常运行；服务器重启或隧道自身重建仍会更换临时地址。
 
 验证主页、健康、静态资源、视频Range、注册登录与问答；测试账号按精确ID清理。导入和测验生成通过后台队列立即返回，不在公网请求中等待整篇模型处理。Quick Tunnel不支持SSE，当前助教使用普通HTTP问答，无需SSE。Cloudflare对长请求及上传大小有限制，参见https://developers.cloudflare.com/fundamentals/reference/connection-limits/。

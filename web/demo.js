@@ -25,8 +25,9 @@ let data;
 try { data = JSON.parse(localStorage.getItem('bgw-demo') || 'null'); } catch { data = null; }
 if (!data || data.day !== date()) {
   const saved = data?.saved || {};
+  const profile = data?.profile;
   const chats = Object.fromEntries(Object.entries(data?.chats || {}).filter(([id]) => saved[id]));
-  data = { ...initial(), saved, chats };
+  data = { ...initial(), saved, chats, profile };
 }
 const persist = () => localStorage.setItem('bgw-demo', JSON.stringify(data));
 const all = () => [...data.lessons, ...data.quiz];
@@ -49,7 +50,11 @@ export async function demoRequest(path, options = {}) {
   const method = options.method || 'GET';
   const body = options.body && typeof options.body === 'string' ? JSON.parse(options.body) : {};
   let result;
-  if (path === '/auth/me') result = { username: '学习者', id: 'demo', is_admin: true };
+  if (path === '/auth/me') result = { username: '学习者', id: 'demo', is_admin: true, ...(data.profile || {}) };
+  else if (path === '/profile' && method === 'PATCH') {
+    data.profile = { display_name: body.display_name, bio: body.bio, avatar_url: body.avatar_remove ? null : body.avatar_png || data.profile?.avatar_url || null };
+    result = { username: '学习者', id: 'demo', is_admin: true, ...data.profile };
+  }
   else if (path === '/dashboard') {
     const n = data.lessons.filter(i => i.submitted).length;
     result = { day: date(), learned: data.learned, due: 5, mistakes: 3, lesson_done: n, lesson_total: data.lessons.length, quiz_done: data.quiz.filter(i => i.submitted).length, quiz_total: data.quiz.length, accuracy: data.quiz.some(i => i.submitted) ? Math.round(data.quiz.filter(i => i.correct).length / data.quiz.filter(i => i.submitted).length * 100) : null, quiz_unlocked: true, history: [4, 7, 5, 9, 6, 8, n].map((count, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); return { day: d.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }), count }; }) };

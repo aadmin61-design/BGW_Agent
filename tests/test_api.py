@@ -59,6 +59,48 @@ def login(client, username="alice"):
     assert response.status_code == 200
 
 
+def test_profile_is_private_and_cannot_change_credentials(api):
+    client, factory, ids = api
+    login(client)
+    with factory() as db:
+        original_hash = db.get(User, ids.a).password_hash
+    response = client.patch('/api/profile', json={'display_name': '新的显示名字', 'bio': '喜欢学习Java'})
+    assert response.status_code == 200
+    assert response.json()['username'] == 'alice'
+    assert response.json()['display_name'] == '新的显示名字'
+    for protected in ['username', 'password', 'is_admin', 'user_id']:
+        body = {'display_name': '不能修改账号', protected: 'anything'}
+        assert client.patch('/api/profile', json=body).status_code == 422
+    with factory() as db:
+        assert db.get(User, ids.a).password_hash == original_hash
+    login(client, 'bob')
+    other = client.get('/api/auth/me').json()
+    assert other['display_name'] == 'bob' and other['bio'] == ''
+    assert client.get('/api/profile/avatar').status_code == 404
+    login(client)
+    assert client.get('/api/auth/me').json()['display_name'] == '新的显示名字'
+
+
+def test_profile_avatar_validation_is_atomic_and_avatar_is_not_shared(api):
+    import base64, struct, zlib
+    from backend.profile import PNG, png_chunk
+    client, factory, ids = api
+    login(client)
+    image = PNG + png_chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 6, 0, 0, 0)) + png_chunk(b'IDAT', zlib.compress(b'\0\x20\x80\x50\xff')) + png_chunk(b'IEND', b'')
+    avatar = 'data:image/png;base64,' + base64.b64encode(image).decode()
+    result = client.patch('/api/profile', json={'display_name': 'Alice', 'bio': '介绍', 'avatar_png': avatar})
+    assert result.status_code == 200
+    own_image = client.get(result.json()['avatar_url'])
+    assert own_image.status_code == 200 and own_image.headers['content-type'] == 'image/png'
+    assert client.patch('/api/profile', json={'display_name': '不应保存', 'avatar_png': 'bad'}).status_code == 422
+    assert client.get('/api/auth/me').json()['display_name'] == 'Alice'
+    login(client, 'bob')
+    assert client.get(result.json()['avatar_url']).status_code == 404
+    login(client)
+    assert client.patch('/api/profile', json={'display_name': 'Alice', 'avatar_remove': True}).status_code == 200
+    assert client.get('/api/profile/avatar').status_code == 404
+
+
 def test_only_admin_can_publish_cached_prefix_and_running_job_cannot_repeat(api, monkeypatch):
     from backend.models import ImportCheckpoint
     client, factory, ids = api

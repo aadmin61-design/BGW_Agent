@@ -2,11 +2,14 @@ import { demoRequest } from './demo.js';
 import { renderMarkdown } from './markdown.js';
 import { copyCode } from './clipboard.js';
 import { nextPendingLesson } from './learning.js';
+import { dailyQuote } from './quotes.js';
+import { avatarPNG } from './profile.js';
 
 const demo = new URLSearchParams(location.search).get('demo') === '1';
 const root = document.getElementById?.('learning-app') || document.querySelector('#app');
 const state = { user: null, page: 'dashboard', lessons: [], quiz: [], quizJob: null, quizTimer: null, quizPollError: '', quizDrafts: {}, importJobs: [], retryJob: null, bookmarks: [], kbs: [], dashboard: {}, selected: null, conversation: null, chatPending: null, filter: 'all', search: '', answer: '', authMode: 'login', authError: '', busy: false, epoch: 0, jobsTimer: null };
 let pageVisible = true;
+let profileAvatar = null, profileAvatarRemove = false, profileAvatarGeneration = 0;
 // 所有用户/模型/文档文本必须转义后再插入模板，防止持久化脚本注入。
 const e = text => String(text ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const paths = {
@@ -69,12 +72,16 @@ function toast(message) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 4500);
 }
 
-const titles = { dashboard: '学习概览', lesson: '每日学习', quiz: '每日测验', memory: '记忆计划', bookmarks: '我的收藏', knowledge: '知识库', admin: '知识库管理', detail: '学习空间' };
+const titles = { dashboard: '学习概览', lesson: '每日学习', quiz: '每日测验', memory: '记忆计划', bookmarks: '我的收藏', knowledge: '知识库', admin: '知识库管理', profile: '个人资料', detail: '学习空间' };
+const displayName = () => state.user.display_name || state.user.username;
+function avatarHTML(source = state.user.avatar_url) {
+  return source ? `<img src="${e(source)}" alt="" width="192" height="192">` : `<span>${e([...displayName()][0])}</span>`;
+}
 function shell(content) {
   notifyFrame();
   const nav = [['dashboard', '学习概览'], ['lesson', '每日学习'], ['quiz', '每日测验'], ['memory', '记忆计划'], ['bookmarks', '我的收藏'], ['knowledge', '知识库']];
   if (state.user.is_admin) nav.push(['admin', '知识库管理']);
-  root.innerHTML = `<main class="workspace"><header class="workspace-tools"><nav class="workspace-tabs" aria-label="学习功能">${nav.map(([page, label]) => `<button class="${state.page === page ? 'active' : ''}" data-nav="${page}">${label}</button>`).join('')}</nav><div class="workspace-profile"><span>${e(state.user.username)}</span><span class="avatar">${e(state.user.username.slice(0, 1))}</span><button data-action="logout" aria-label="退出登录">${icon('logout')}</button></div></header>${demo ? `<div class="demo-banner"><span>当前使用示例数据 · 不读取真实文档，不调用大模型</span><button data-action="exit-demo">进入正式模式 ${icon('arrow')}</button></div>` : ''}<div class="content">${content}<footer class="footer"><span>© ${new Date().getFullYear()} 知序 · 每一天，多懂一点</span><span>LEARN. CONNECT. GROW.</span></footer></div></main>`;
+  root.innerHTML = `<main class="workspace"><header class="workspace-tools"><nav class="workspace-tabs" aria-label="学习功能">${nav.map(([page, label]) => `<button class="${state.page === page ? 'active' : ''}" data-nav="${page}">${label}</button>`).join('')}</nav><div class="workspace-profile"><button class="profile-link" data-nav="profile" aria-label="个人资料"><span class="profile-name">${e(displayName())}</span><span class="avatar">${avatarHTML()}</span></button><button data-action="logout" aria-label="退出登录">${icon('logout')}</button></div></header>${demo ? `<div class="demo-banner"><span>当前使用示例数据 · 不读取真实文档，不调用大模型</span><button data-action="exit-demo">进入正式模式 ${icon('arrow')}</button></div>` : ''}<div class="content">${content}<footer class="footer"><span>© ${new Date().getFullYear()} 知序 · 每一天，多懂一点</span><span>LEARN. CONNECT. GROW.</span></footer></div></main>`;
 }
 
 function notifyFrame() {
@@ -97,10 +104,11 @@ function lessonRows(items, limit) {
 }
 
 function dashboardView() {
+  const quote = dailyQuote();
   const d = state.dashboard, percent = Math.round((d.lesson_done || 0) / (d.lesson_total || 10) * 100);
   const history = d.history || [], max = Math.max(10, ...history.map(x => x.count));
   const bars = Array.from({ length: 7 }, (_, i) => { const day = new Date(); day.setDate(day.getDate() - 6 + i); const ds = day.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }); const count = history.find(x => x.day === ds)?.count || 0; return `<div class="bar-col"><div class="bar ${i === 6 ? 'today' : ''}" style="height:${Math.max(3, count / max * 55)}px" title="${count} 项完成"></div><small>${['日', '一', '二', '三', '四', '五', '六'][day.getDay()]}</small></div>`; }).join('');
-  return `<section class="welcome"><div><div class="eyebrow">YOUR DAILY LEARNING</div><h1>今天，也向前一步。</h1><p>从理解一个概念开始，让知识成为自己的底气。</p></div><span class="date-chip">${icon('calendar')}${dateLabel()}</span></section><div class="dashboard-grid"><div class="main-stack"><section class="hero"><div class="hero-content"><span class="eyebrow">TODAY’S LEARNING JOURNEY</span><h2>每天 10 个知识点，<br><span>让成长有迹可循。</span></h2><p>循着知识的脉络，由浅入深。<br>与你的专属助教一起，把问题真正弄懂。</p>${btn(`开始今日学习 ${icon('arrow')}`, 'start-lesson')}</div></section><div class="stats"><article class="stat"><div class="stat-head">${icon('book')}累计学习知识</div><div class="stat-value"><b>${d.learned || 0}</b><span>个</span></div><div class="stat-footer"><span>已完成的知识点</span><em>持续积累中</em></div></article><article class="stat"><div class="stat-head">${icon('memory')}待巩固知识</div><div class="stat-value"><b>${d.due || 0}</b><span>个</span></div><div class="stat-footer"><span>到期复习优先安排</span><em>温故知新</em></div></article><article class="stat"><div class="stat-head">${icon('quiz')}今日测验正确率</div><div class="stat-value"><b>${d.accuracy === null || d.accuracy === undefined ? '—' : d.accuracy}</b><span>${d.accuracy == null ? '' : '%'}</span></div><div class="stat-footer"><span>${d.quiz_done || 0} / ${d.quiz_total || 13} 题已完成</span><em>${d.quiz_unlocked ? '检验理解' : '次日解锁'}</em></div></article></div><section><div class="section-head"><h2>今日学习清单 <small>${state.lessons.length ? `${state.lessons.length} 个知识点` : '等待开启'}</small></h2><button class="text-link" data-nav="lesson">查看全部 ${icon('arrow')}</button></div><div class="panel">${state.lessons.length ? lessonRows(state.lessons, 5) : empty('从今天的第一个知识点开始', '导入知识库后，点击开始学习生成今日计划。', 'book')}${state.lessons.length ? `<div class="more-row"><button data-action="more-lesson">${icon('plus')}再学一点，添加更多内容</button></div>` : ''}</div></section><section class="review-banner"><span class="review-icon">${icon('quiz')}</span><div><h3>${d.quiz_unlocked ? '把昨天学到的，变成今天记得的。' : '学过的知识，值得再见一次。'}</h3><p>${d.quiz_unlocked ? '10 道选择题 + 3 道填空题，检验与巩固你的理解。' : '完成今日学习后，第二天解锁专属知识测验。'}</p></div><button class="text-link" data-action="start-quiz">${d.quiz_unlocked ? '开始测验' : '了解测验'} ${icon('arrow')}</button></section></div><aside class="right-stack"><section class="panel daily-progress"><div class="panel-title"><h3>今日学习进度</h3>${icon('spark')}</div><div class="ring"><svg viewBox="0 0 142 142"><circle class="ring-track" cx="71" cy="71" r="60"/><circle class="ring-fill" cx="71" cy="71" r="60" stroke-dasharray="${percent / 100 * 377} 377"/></svg><div><strong>${percent}<span>%</span></strong><small>一点点，也很了不起</small></div></div><div class="progress-legend"><span><i></i>已学习 ${d.lesson_done || 0} 个</span><span><i></i>待学习 ${Math.max(0, (d.lesson_total || 10) - (d.lesson_done || 0))} 个</span></div><div class="progress-line"><span>今日目标</span><strong>理解，比速度重要</strong></div></section><section class="panel activity"><div class="panel-title"><h3>本周学习节奏</h3>${icon('calendar')}</div><div class="bars">${bars}</div><p class="activity-note">${icon('leaf')}每一次回来，都在为成长添一笔。</p></section><section class="panel insight"><span class="eyebrow">${icon('spark')}A MOMENT TO THINK</span><blockquote>“学习不是把知识装进头脑，<br>而是让它在思考中生根。”</blockquote><small>保持好奇，也给自己一点时间。</small></section></aside></div>`;
+  return `<section class="welcome"><div><div class="eyebrow">YOUR DAILY LEARNING</div><h1>今天，也向前一步。</h1><p>从理解一个概念开始，让知识成为自己的底气。</p></div><span class="date-chip">${icon('calendar')}${dateLabel()}</span></section><div class="dashboard-grid"><div class="main-stack"><section class="hero"><div class="hero-content"><span class="eyebrow">TODAY’S LEARNING JOURNEY</span><h2>每天 10 个知识点，<br><span>让成长有迹可循。</span></h2><p>循着知识的脉络，由浅入深。<br>与你的专属助教一起，把问题真正弄懂。</p>${btn(`开始今日学习 ${icon('arrow')}`, 'start-lesson')}</div></section><div class="stats"><article class="stat"><div class="stat-head">${icon('book')}累计学习知识</div><div class="stat-value"><b>${d.learned || 0}</b><span>个</span></div><div class="stat-footer"><span>已完成的知识点</span><em>持续积累中</em></div></article><article class="stat"><div class="stat-head">${icon('memory')}待巩固知识</div><div class="stat-value"><b>${d.due || 0}</b><span>个</span></div><div class="stat-footer"><span>到期复习优先安排</span><em>温故知新</em></div></article><article class="stat"><div class="stat-head">${icon('quiz')}今日测验正确率</div><div class="stat-value"><b>${d.accuracy === null || d.accuracy === undefined ? '—' : d.accuracy}</b><span>${d.accuracy == null ? '' : '%'}</span></div><div class="stat-footer"><span>${d.quiz_done || 0} / ${d.quiz_total || 13} 题已完成</span><em>${d.quiz_unlocked ? '检验理解' : '次日解锁'}</em></div></article></div><section><div class="section-head"><h2>今日学习清单 <small>${state.lessons.length ? `${state.lessons.length} 个知识点` : '等待开启'}</small></h2><button class="text-link" data-nav="lesson">查看全部 ${icon('arrow')}</button></div><div class="panel">${state.lessons.length ? lessonRows(state.lessons, 5) : empty('从今天的第一个知识点开始', '导入知识库后，点击开始学习生成今日计划。', 'book')}${state.lessons.length ? `<div class="more-row"><button data-action="more-lesson">${icon('plus')}再学一点，添加更多内容</button></div>` : ''}</div></section><section class="review-banner"><span class="review-icon">${icon('quiz')}</span><div><h3>${d.quiz_unlocked ? '把昨天学到的，变成今天记得的。' : '学过的知识，值得再见一次。'}</h3><p>${d.quiz_unlocked ? '10 道选择题 + 3 道填空题，检验与巩固你的理解。' : '完成今日学习后，第二天解锁专属知识测验。'}</p></div><button class="text-link" data-action="start-quiz">${d.quiz_unlocked ? '开始测验' : '了解测验'} ${icon('arrow')}</button></section></div><aside class="right-stack"><section class="panel daily-progress"><div class="panel-title"><h3>今日学习进度</h3>${icon('spark')}</div><div class="ring"><svg viewBox="0 0 142 142"><circle class="ring-track" cx="71" cy="71" r="60"/><circle class="ring-fill" cx="71" cy="71" r="60" stroke-dasharray="${percent / 100 * 377} 377"/></svg><div><strong>${percent}<span>%</span></strong></div></div><div class="progress-legend"><span><i></i>已学习 ${d.lesson_done || 0} 个</span><span><i></i>待学习 ${Math.max(0, (d.lesson_total || 10) - (d.lesson_done || 0))} 个</span></div><div class="progress-line"><span>今日目标</span><strong>理解，比速度重要</strong></div></section><section class="panel activity"><div class="panel-title"><h3>本周学习节奏</h3>${icon('calendar')}</div><div class="bars">${bars}</div><p class="activity-note">${icon('leaf')}每一次回来，都在为成长添一笔。</p></section><section class="panel insight"><span class="eyebrow">${icon('spark')}每日一言</span><blockquote>“${e(quote.text)}”</blockquote><cite class="quote-source"><span>— ${e(quote.author)}</span><a href="${e(quote.url)}" target="_blank" rel="noopener noreferrer">${e(quote.source)}</a></cite></section></aside></div>`;
 }
 
 function empty(title, description, symbol = 'book') { return `<div class="empty">${icon(symbol)}<h3>${e(title)}</h3><p>${e(description)}</p></div>`; }
@@ -207,6 +215,7 @@ function detailView() {
 
 async function navigate(page, updateHash = true) {
   saveQuizDraft();
+  profileAvatar = null; profileAvatarRemove = false; profileAvatarGeneration++;
   state.retryJob = null;
   clearTimeout(state.quizTimer);
   clearInterval(state.jobsTimer);
@@ -214,6 +223,11 @@ async function navigate(page, updateHash = true) {
   if (updateHash) location.hash = page;
   shell('<div class="loading">正在打开你的学习空间…</div>');
   try {
+    if (page === 'profile') {
+      const user = await api('/auth/me');
+      if (epoch === state.epoch) { state.user = user; renderPage(); }
+      return;
+    }
     const tasks = [api('/dashboard'), api('/plans/lesson'), api('/plans/quiz'), api('/knowledge-bases'), api('/bookmarks')];
     const [dashboard, lessons, quiz, kbs, bookmarks] = await Promise.all(tasks);
     if (epoch !== state.epoch) return;
@@ -237,9 +251,13 @@ async function navigate(page, updateHash = true) {
 }
 
 function renderPage() {
-  const views = { dashboard: dashboardView, lesson: () => plansView('lesson'), quiz: () => plansView('quiz'), knowledge: knowledgeView, bookmarks: bookmarksView, detail: detailView };
+  const views = { dashboard: dashboardView, lesson: () => plansView('lesson'), quiz: () => plansView('quiz'), knowledge: knowledgeView, bookmarks: bookmarksView, detail: detailView, profile: profileView };
   shell((views[state.page] || dashboardView)());
   if (state.page === 'detail') { const el = document.querySelector('#chat-messages'); el.scrollTop = el.scrollHeight; }
+}
+
+function profileView() {
+  return `${pageHead('个人资料', '让学习空间带上你的样子。', 'YOUR PROFILE')}<section class="panel profile-panel"><form id="profile-form" class="profile-form"><div class="profile-avatar-row"><div class="profile-avatar" id="profile-avatar-preview">${avatarHTML()}</div><div><button class="btn secondary" type="button" data-action="choose-avatar">更换头像</button><input id="profile-avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden><button class="text-link" type="button" data-action="remove-avatar">恢复默认头像</button><small>PNG、JPEG、WebP · 原图最多 4 MB</small></div></div><label class="field">登录账号<input value="${e(state.user.username)}" disabled></label><p class="profile-account-note">登录账号和密码不可在此修改。</p><label class="field">显示名字<input name="display_name" value="${e(displayName())}" required maxlength="40" autocomplete="nickname"></label><label class="field">个人简介<textarea name="bio" maxlength="500" rows="4" placeholder="写一点关于自己的介绍">${e(state.user.bio || '')}</textarea></label><div class="profile-actions"><button class="btn" type="submit">保存资料 ${icon('check')}</button><button class="btn secondary" type="button" data-nav="dashboard">返回学习概览</button></div></form></section>`;
 }
 
 async function openItem(id, bookmark = false) {
@@ -328,6 +346,14 @@ async function generatePlan(kind, more = false) {
 }
 
 async function perform(action, element) {
+  if (action === 'choose-avatar') { document.querySelector('#profile-avatar-file').click(); return; }
+  if (action === 'remove-avatar') {
+    profileAvatar = null; profileAvatarRemove = true; profileAvatarGeneration++;
+    document.querySelector('#profile-avatar-preview').innerHTML = avatarHTML(null);
+    document.querySelector('#profile-avatar-file').value = '';
+    document.querySelector('#profile-form button[type="submit"]').disabled = false;
+    return;
+  }
   if (action === 'menu') { document.querySelector('.sidebar')?.classList.toggle('open'); document.querySelector('.menu-overlay')?.classList.toggle('open'); return; }
   if (action === 'demo') { location.href = '/?demo=1'; return; }
   if (action === 'exit-demo') { location.href = '/'; return; }
@@ -433,6 +459,22 @@ root.addEventListener('input', event => {
     const input = document.querySelector('#list-search'); input.focus(); input.setSelectionRange(pos, pos);
   }
 });
+root.addEventListener('change', async event => {
+  if (event.target.id !== 'profile-avatar-file' || !event.target.files?.[0]) return;
+  if (state.busy) return;
+  const epoch = state.epoch, selection = ++profileAvatarGeneration;
+  const form = document.querySelector('#profile-form');
+  const save = form.querySelector('button[type="submit"]');
+  save.disabled = true;
+  try {
+    const png = await avatarPNG(event.target.files[0]);
+    // 解码完成前已离开页面时丢弃结果，不覆盖其他用户或页面。
+    if (state.epoch !== epoch || state.page !== 'profile' || selection !== profileAvatarGeneration) return;
+    profileAvatar = png; profileAvatarRemove = false;
+    document.querySelector('#profile-avatar-preview').innerHTML = avatarHTML(png);
+  } catch (error) { if (state.epoch === epoch) toast(error.message || '头像无法读取，请换一张图片'); }
+  finally { if (save.isConnected && selection === profileAvatarGeneration) save.disabled = false; }
+});
 root.addEventListener('submit', async event => {
   event.preventDefault(); if (state.busy) return;
   state.busy = true; const form = event.target, button = form.querySelector('button[type="submit"]'); if (button) button.disabled = true;
@@ -441,6 +483,14 @@ root.addEventListener('submit', async event => {
     if (form.id === 'auth-form') {
       state.user = await api(`/auth/${state.authMode}`, 'POST', { username: fields.get('username'), password: fields.get('password') });
       state.authError = ''; await navigate('dashboard');
+    } else if (form.id === 'profile-form') {
+      const profileUser = state.user.id, epoch = state.epoch;
+      const updated = await api('/profile', 'PATCH', { display_name: fields.get('display_name').trim(),
+        bio: fields.get('bio'), avatar_png: profileAvatar, avatar_remove: profileAvatarRemove });
+      if (state.user?.id === profileUser) {
+        state.user = updated; notifyFrame();
+        if (state.epoch === epoch) { profileAvatar = null; profileAvatarRemove = false; renderPage(); toast('个人资料已保存'); }
+      }
     } else if (form.id === 'chat-form') {
       const message = fields.get('message').trim(); if (!message) throw new Error('请输入问题');
       await sendChat(message);
